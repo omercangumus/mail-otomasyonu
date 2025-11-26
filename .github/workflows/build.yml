@@ -29,7 +29,7 @@ jobs:
           pyinstaller --name="Email Otomasyonu" --onefile --windowed --icon=icon.ico --clean --noconfirm bulk_email_app.py
       
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows-exe
           path: dist/Email Otomasyonu.exe
@@ -55,7 +55,7 @@ jobs:
           python3 -m PyInstaller --name="Email Otomasyonu" --onefile --windowed --icon=icon.ico --clean --noconfirm bulk_email_app.py
       
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: macos-app
           path: dist/Email Otomasyonu.app
