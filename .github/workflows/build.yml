@@ -23,7 +23,7 @@ jobs:
           pip install pyinstaller
       
       - name: Build Windows executable
-        run: |\
+        run: |
           pyinstaller --name="Email_Otomasyonu" --onefile --windowed --hidden-import=customtkinter --hidden-import=PIL._tkinter_finder --collect-all=customtkinter --noconfirm bulk_email_app.py
       
       - name: Check if exe exists
