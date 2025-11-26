@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.spec
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project specific
+settings.json
+build_windows.bat
+build_mac.sh
+BUILD_INSTRUCTIONS.md
+MAC_*.md
+TEK_*.md
+NASIL_*.md
+HIZLI_*.md
+BASIT_*.bat
+BASIT_*.sh
+create_shortcut.vbs
+convert_icon.py
+launch_app.bat
+build_exe.bat
+email-automation-tauri/
