@@ -3,59 +3,82 @@ name: Build Email Automation
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install customtkinter pillow
           pip install pyinstaller
       
       - name: Build Windows executable
+        run: |\
+          pyinstaller --name="Email_Otomasyonu" --onefile --windowed --hidden-import=customtkinter --hidden-import=PIL._tkinter_finder --collect-all=customtkinter --noconfirm bulk_email_app.py
+      
+      - name: Check if exe exists
         run: |
-          pyinstaller --name="Email Otomasyonu" --onefile --windowed --icon=icon.ico --clean --noconfirm bulk_email_app.py
+          if (Test-Path "dist/Email_Otomasyonu.exe") {
+            Write-Host "✅ EXE created successfully"
+            Get-ChildItem dist
+          } else {
+            Write-Host "❌ EXE not found"
+            exit 1
+          }
       
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-exe
-          path: dist/Email Otomasyonu.exe
+          path: dist/Email_Otomasyonu.exe
 
   build-macos:
-    runs-on: macos-latest
+    runs-on: macos-13
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          pip3 install -r requirements.txt
+          pip3 install customtkinter pillow
           pip3 install pyinstaller
       
       - name: Build macOS application
         run: |
-          python3 -m PyInstaller --name="Email Otomasyonu" --onefile --windowed --icon=icon.ico --clean --noconfirm bulk_email_app.py
+          python3 -m PyInstaller --name="Email_Otomasyonu" --onefile --windowed --hidden-import=customtkinter --hidden-import=PIL._tkinter_finder --collect-all=customtkinter --noconfirm bulk_email_app.py
+      
+      - name: Check if app exists
+        run: |
+          if [ -d "dist/Email_Otomasyonu.app" ]; then
+            echo "✅ APP created successfully"
+            ls -la dist/
+          else
+            echo "❌ APP not found"
+            exit 1
+          fi
+      
+      - name: Compress app for upload
+        run: |
+          cd dist
+          zip -r Email_Otomasyonu_Mac.zip Email_Otomasyonu.app
       
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-app
-          path: dist/Email Otomasyonu.app
+          path: dist/Email_Otomasyonu_Mac.zip
