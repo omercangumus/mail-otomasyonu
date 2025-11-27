@@ -13,6 +13,7 @@ def create_zip():
         'bulk_email_app.py',
         'install_animation.py',
         'KUR.bat',
+        'KUR.command',
         'requirements.txt',
         'icon.ico',
         'README.md',
