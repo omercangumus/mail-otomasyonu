@@ -1,42 +1,41 @@
-# 🍎 MAC İÇİN BUILD TALİMATLARI
+# Mac İçin Kurulum Rehberi
 
-## AWS veya Mac'te Çalıştır
+## 🚀 Hızlı Kurulum (Önerilen)
 
-### Adım 1: Bağımlılıkları Yükle
-```bash
-pip3 install -r requirements.txt
-pip3 install pyinstaller
-```
+1. `KUR.command` dosyasına çift tıklayın.
+2. Açılan terminal penceresinde kurulumun tamamlanmasını bekleyin.
+3. Masaüstüne `EmailOtomasyonu` uygulaması gelecektir.
 
-### Adım 2: .app Oluştur
-```bash
-pyinstaller --name="Email Otomasyonu" \
-    --onefile \
-    --windowed \
-    --icon=icon.ico \
-    --clean \
-    bulk_email_app.py
-```
-
-### Adım 3: Oluşan Dosya
-```
-dist/Email Otomasyonu.app
-```
-
-Çift tıkla → Açılır!
+> **Not:** Eğer "Geliştiricisi doğrulanamadı" hatası alırsanız:
+> Uygulamaya **Sağ Tık -> Aç** diyerek açın.
 
 ---
 
-## Veya build_mac.sh Kullan
+## 🛠 Manuel Kurulum (Alternatif)
 
+Eğer otomatik kurulum çalışmazsa:
+
+1. Terminali açın
+2. Proje klasörüne gidin:
+   ```bash
+   cd /path/to/folder
+   ```
+3. Gerekli paketleri yükleyin:
+   ```bash
+   pip3 install customtkinter pillow pyinstaller certifi
+   ```
+4. Uygulamayı çalıştırın:
+   ```bash
+   python3 bulk_email_app.py
+   ```
+
+## ⚠️ Sık Karşılaşılan Sorunlar
+
+**"Uygulama hasarlı" veya "Açılamıyor" hatası:**
+Terminalde şu komutu çalıştırın:
 ```bash
-chmod +x build_mac.sh
-./build_mac.sh
+xattr -cr ~/Desktop/EmailOtomasyonu.app
 ```
 
-Otomatik build yapar ve masaüstüne kopyalar.
-
----
-
-## Not
-Bu işlem sadece **Mac** sistemlerde çalışır.
+**Python bulunamadı hatası:**
+Mac'inizde Python 3 yüklü olduğundan emin olun. Terminale `python3 --version` yazarak kontrol edebilirsiniz.

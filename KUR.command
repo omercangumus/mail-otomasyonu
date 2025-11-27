@@ -21,9 +21,22 @@ python3 --version
 sleep 1
 
 echo ""
-echo "[2/4] Bagimliliklar yukleniyor..."
-python3 -m pip install --quiet --upgrade pip --user
-python3 -m pip install --quiet customtkinter pillow pyinstaller certifi --user
+echo "[2/4] Kurulum sihirbazi baslatiliyor..."
+sleep 1
+
+# Animasyonlu kurulumu çalıştır
+if [ -f "install_animation.py" ]; then
+    python3 install_animation.py
+    if [ $? -ne 0 ]; then
+        echo "⚠️  Kurulum sihirbazi hata verdi, manuel devam ediliyor..."
+        python3 -m pip install --quiet --upgrade pip --user
+        python3 -m pip install --quiet customtkinter pillow pyinstaller certifi --user
+    fi
+else
+    echo "⚠️  Animasyon dosyasi bulunamadi, normal kurulum yapiliyor..."
+    python3 -m pip install --quiet --upgrade pip --user
+    python3 -m pip install --quiet customtkinter pillow pyinstaller certifi --user
+fi
 
 echo ""
 echo "[3/4] Uygulama derleniyor (2-3 dakika)..."
