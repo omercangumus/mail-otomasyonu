@@ -10,7 +10,6 @@ import ssl
 import re
 import logging
 import socket
-import gc
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -18,9 +17,6 @@ from email.mime.base import MIMEBase
 from email import encoders
 from tkinter import messagebox, filedialog
 from typing import Dict, List, Optional, Any
-from functools import wraps
-from concurrent.futures import ThreadPoolExecutor
-import weakref
 
 # --- LOGGING SETUP ---
 logging.basicConfig(
@@ -44,7 +40,7 @@ except ImportError as e:
 
 # --- CONSTANTS ---
 APP_NAME = "EmailOtomasyonu"
-VERSION = "2.1.0"
+VERSION = "2.0.0"
 DEFAULT_SMTP_SERVER = "smtp.gmail.com"
 DEFAULT_SMTP_PORT = 587
 DEFAULT_INTERVAL = 30
@@ -79,46 +75,21 @@ DEFAULT_SETTINGS = {
     "single_attachment_path": ""
 }
 
-# --- DECORATORS FOR SAFETY ---
-def safe_execute(func):
-    """Decorator to catch and log exceptions in functions."""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            logging.error(f"Error in {func.__name__}: {e}", exc_info=True)
-            return None
-    return wrapper
-
-def rate_limit(min_interval=1.0):
-    """Decorator to rate limit function calls."""
-    def decorator(func):
-        last_called = [0.0]
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            now = time.time()
-            if now - last_called[0] < min_interval:
-                time.sleep(min_interval - (now - last_called[0]))
-            last_called[0] = time.time()
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
 class SettingsManager:
     """Manages application settings with robust error handling."""
     
     def __init__(self):
         self._ensure_data_dir()
         self.settings = self._load_settings()
-        self._lock = threading.Lock()  # Thread safety
 
-    @safe_execute
     def _ensure_data_dir(self):
-        if not os.path.exists(DATA_DIR):
-            os.makedirs(DATA_DIR, exist_ok=True)
+        try:
+            if not os.path.exists(DATA_DIR):
+                os.makedirs(DATA_DIR, exist_ok=True)
+        except OSError as e:
+            logging.error(f"Failed to create data dir: {e}")
+            messagebox.showerror("Sistem Hatası", f"Veri klasörü oluşturulamadı:\n{e}")
 
-    @safe_execute
     def _load_settings(self) -> Dict[str, Any]:
         if not os.path.exists(SETTINGS_FILE):
             return DEFAULT_SETTINGS.copy()
@@ -126,12 +97,7 @@ class SettingsManager:
         try:
             with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # Validate data size (prevent memory overload)
-                if sys.getsizeof(data) > 10 * 1024 * 1024:  # 10MB limit
-                    logging.warning("Settings file too large, using defaults")
-                    return DEFAULT_SETTINGS.copy()
-                
-                # Merge with defaults
+                # Merge with defaults to ensure all keys exist
                 for key, value in DEFAULT_SETTINGS.items():
                     if key not in data:
                         data[key] = value
@@ -146,40 +112,28 @@ class SettingsManager:
             logging.error(f"Error loading settings: {e}")
             return DEFAULT_SETTINGS.copy()
 
-    @safe_execute
     def save(self) -> bool:
-        with self._lock:
-            try:
-                with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(self.settings, f, indent=4, ensure_ascii=False)
-                return True
-            except Exception as e:
-                logging.error(f"Error saving settings: {e}")
-                return False
+        try:
+            with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.settings, f, indent=4, ensure_ascii=False)
+            return True
+        except Exception as e:
+            logging.error(f"Error saving settings: {e}")
+            messagebox.showerror("Kaydetme Hatası", f"Ayarlar kaydedilemedi:\n{e}")
+            return False
 
     def get(self, key: str, default: Any = None) -> Any:
-        with self._lock:
-            return self.settings.get(key, default)
+        return self.settings.get(key, default)
 
     def set(self, key: str, value: Any):
-        with self._lock:
-            self.settings[key] = value
+        self.settings[key] = value
 
 class EmailService:
     """Handles SMTP connections and email sending with detailed error reporting."""
     
-    def __init__(self):
-        self._connection_pool = weakref.WeakValueDictionary()
-        self._send_lock = threading.Lock()
-    
     @staticmethod
-    @safe_execute
     def test_connection(server, port, email, password) -> tuple[bool, str]:
         try:
-            # Input validation
-            if not all([server, port, email, password]):
-                return False, "Tüm alanları doldurun"
-            
             context = ssl.create_default_context(cafile=certifi.where())
             with smtplib.SMTP(server, port, timeout=10) as smtp:
                 smtp.starttls(context=context)
@@ -191,57 +145,44 @@ class EmailService:
             return False, "❌ Sunucuya bağlanılamadı!\n\n• İnternet bağlantınızı kontrol edin\n• SMTP sunucu adresini doğrulayın\n• Ayarlarınızı kaydettiniz mi kontrol edin"
         except socket.gaierror:
             return False, "❌ Sunucu adresi bulunamadı!\n\n• SMTP sunucu adresini kontrol edin\n• İnternet bağlantınızı doğrulayın\n• Ayarlarınızı kaydettiniz mi kontrol edin"
-        except socket.timeout:
-            return False, "❌ Bağlantı zaman aşımına uğradı!\n\nSunucu yanıt vermiyor."
         except Exception as e:
             return False, f"❌ Beklenmeyen hata: {str(e)}\n\nAyarlarınızı kaydetmeyi deneyin."
 
-    @rate_limit(min_interval=0.5)  # Rate limiting: min 0.5s between emails
-    @safe_execute
-    def send_email(self, config: Dict, recipient: str, is_single: bool = False) -> tuple[bool, str]:
-        with self._send_lock:  # Thread safety
-            try:
-                # Input validation
-                if not recipient or '@' not in recipient:
-                    return False, "Geçersiz e-posta adresi"
-                
-                msg = MIMEMultipart()
-                sender_name = config.get("sender_name", "")
-                from_addr = f"{sender_name} <{config['email']}>" if sender_name else config['email']
-                
-                msg['From'] = from_addr
-                msg['To'] = recipient
-                msg['Subject'] = config['single_subject'] if is_single else config['subject']
-                
-                body = config['single_message'] if is_single else config['message']
-                msg.attach(MIMEText(body, 'plain'))
-                
-                att_path = config.get('single_attachment_path' if is_single else 'attachment_path')
-                if att_path and os.path.exists(att_path):
-                    try:
-                        # File size check (prevent huge attachments)
-                        file_size = os.path.getsize(att_path)
-                        if file_size > 25 * 1024 * 1024:  # 25MB limit
-                            return False, "Ek dosya çok büyük (max 25MB)"
-                        
-                        with open(att_path, 'rb') as f:
-                            part = MIMEBase('application', 'octet-stream')
-                            part.set_payload(f.read())
-                            encoders.encode_base64(part)
-                            part.add_header('Content-Disposition', f'attachment; filename= {os.path.basename(att_path)}')
-                            msg.attach(part)
-                    except Exception as e:
-                        return False, f"Ek dosya hatası: {e}"
+    @staticmethod
+    def send_email(config: Dict, recipient: str, is_single: bool = False) -> tuple[bool, str]:
+        try:
+            msg = MIMEMultipart()
+            sender_name = config.get("sender_name", "")
+            from_addr = f"{sender_name} <{config['email']}>" if sender_name else config['email']
+            
+            msg['From'] = from_addr
+            msg['To'] = recipient
+            msg['Subject'] = config['single_subject'] if is_single else config['subject']
+            
+            body = config['single_message'] if is_single else config['message']
+            msg.attach(MIMEText(body, 'plain'))
+            
+            att_path = config.get('single_attachment_path' if is_single else 'attachment_path')
+            if att_path and os.path.exists(att_path):
+                try:
+                    with open(att_path, 'rb') as f:
+                        part = MIMEBase('application', 'octet-stream')
+                        part.set_payload(f.read())
+                        encoders.encode_base64(part)
+                        part.add_header('Content-Disposition', f'attachment; filename= {os.path.basename(att_path)}')
+                        msg.attach(part)
+                except Exception as e:
+                    return False, f"Ek dosya hatası: {e}"
 
-                context = ssl.create_default_context(cafile=certifi.where())
-                with smtplib.SMTP(config['smtp_server'], config['smtp_port'], timeout=30) as smtp:
-                    smtp.starttls(context=context)
-                    smtp.login(config['email'], config['password'])
-                    smtp.send_message(msg)
-                
-                return True, "OK"
-            except Exception as e:
-                return False, str(e)
+            context = ssl.create_default_context(cafile=certifi.where())
+            with smtplib.SMTP(config['smtp_server'], config['smtp_port'], timeout=30) as smtp:
+                smtp.starttls(context=context)
+                smtp.login(config['email'], config['password'])
+                smtp.send_message(msg)
+            
+            return True, "OK"
+        except Exception as e:
+            return False, str(e)
 
 class SplashScreen(ctk.CTk):
     """Premium loading screen."""
@@ -308,15 +249,14 @@ class BulkEmailAutomationApp(ctk.CTk):
         self._init_ui()
         self._load_initial_state()
         
-            'primary': '#1E88E5',
-            'primary_dark': '#1565C0',
-            'success': '#2ECC71',
-            'warning': '#FFA726',
-            'danger': '#E74C3C',
-            'bg_dark': '#1a1a1a',
-            'bg_card': '#2B2B2B',
-            'text_muted': '#888888'
-        }
+        # Window close handler
+        self.protocol("WM_DELETE_WINDOW", self._on_closing)
+
+    def _setup_window(self):
+        self.title(f"📧 {APP_NAME} v{VERSION}")
+        self.geometry("1100x750")
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
         
         try:
             icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
@@ -523,6 +463,75 @@ class BulkEmailAutomationApp(ctk.CTk):
         color = "gray"
         
         if not last_sent:
+            status_text = "Hiç gönderilmedi"
+            icon = "⚠️"
+            color = "#FFA726"
+        else:
+            try:
+                last_date = datetime.fromisoformat(last_sent)
+                days_passed = (datetime.now() - last_date).days
+                
+                if days_passed >= interval:
+                    status_text = f"GÖNDERİLMELİ ({days_passed - interval} gün gecikme)"
+                    icon = "🔔"
+                    color = "#E74C3C"
+                else:
+                    remaining = interval - days_passed
+                    status_text = f"Beklemede ({remaining} gün kaldı)"
+                    icon = "✅"
+                    color = "#2ECC71"
+            except:
+                status_text = "Tarih hatası"
+        
+        self.status_icon.configure(text=icon)
+        self.status_label.configure(text=status_text, text_color=color)
+        
+        stats = f"👥 Alıcı: {len(recipients)}\n⏰ Aralık: {interval} gün"
+        self.stats_label.configure(text=stats)
+
+    # --- ACTIONS ---
+
+    def _save_settings(self):
+        try:
+            self.settings_manager.set("sender_name", self.ent_sender.get())
+            self.settings_manager.set("smtp_server", self.ent_server.get())
+            self.settings_manager.set("smtp_port", int(self.ent_port.get()))
+            self.settings_manager.set("email", self.ent_email.get())
+            self.settings_manager.set("password", self.ent_pass.get())
+            self.settings_manager.set("subject", self.ent_subject.get())
+            self.settings_manager.set("message", self.txt_message.get("1.0", "end-1c"))
+            self.settings_manager.set("interval_days", int(self.ent_interval.get()))
+            
+            if self.settings_manager.save():
+                messagebox.showinfo("Başarılı", "Ayarlar kaydedildi.")
+                self._refresh_status()
+        except ValueError:
+            messagebox.showerror("Hata", "Port ve Gün alanları sayı olmalıdır.")
+
+    def _save_recipients(self):
+        text = self.txt_recipients.get("1.0", "end-1c")
+        recipients = [line.strip() for line in text.split("\n") if line.strip()]
+        # Basic validation
+        valid = [r for r in recipients if "@" in r]
+        
+        self.settings_manager.set("recipients", valid)
+        if self.settings_manager.save():
+            messagebox.showinfo("Başarılı", f"{len(valid)} alıcı kaydedildi.")
+            self._refresh_status()
+
+    def _import_recipients(self):
+        filename = filedialog.askopenfilename(filetypes=[("Text", "*.txt"), ("All", "*.*")])
+        if filename:
+            try:
+                with open(filename, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    self.txt_recipients.delete("1.0", "end")
+                    self.txt_recipients.insert("1.0", content)
+            except Exception as e:
+                messagebox.showerror("Hata", f"Dosya okunamadı: {e}")
+
+    def _select_file(self, is_single):
+        filename = filedialog.askopenfilename()
         if filename:
             key = "single_attachment_path" if is_single else "attachment_path"
             self.settings_manager.set(key, filename)
