@@ -1,156 +1,155 @@
 @echo off
 setlocal EnableDelayedExpansion
-:: UTF-8 karakter destegi icin
-chcp 65001 >nul
-title Email Otomasyonu - Akilli Kurulum
+:: UTF-8 karakter destegi
+chcp 65001 >nul 2>&1
+title Email Otomasyonu - Kurulum
 color 0A
 
-:: Debug bilgisi
-echo [BASLATIYOR] Kurulum scripti calisiyor...
+:: Script dizinini al
+set "SCRIPT_DIR=%~dp0"
+set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 
-:: Yönetici izni kontrolü
+:: Yönetici kontrolü
 net session >nul 2>&1
-if %errorLevel% == 0 (
-    goto :ADMIN_OK
-) else (
-    echo.
-    echo [BILGI] Yonetici izni gerekiyor...
-    echo Lutfen acilan pencerede "Evet" deyin.
-    echo.
-    
-    :: Scripti yönetici olarak yeniden başlat
-    :: %~f0 tam dosya yolunu verir.
-    powershell -Command "Start-Process cmd -ArgumentList '/k, \"\"%~f0\"\"' -Verb RunAs"
-    exit /b
-)
+if %errorLevel% == 0 goto :ADMIN_OK
+
+:: Yönetici değilse, yetki iste
+echo.
+echo [BILGI] Yonetici izni gerekiyor...
+echo Lutfen acilan pencerede "Evet" deyin.
+echo.
+powershell -Command "Start-Process cmd -ArgumentList '/k cd /d \"%SCRIPT_DIR%\" && \"%~f0\"' -Verb RunAs"
+exit /b
 
 :ADMIN_OK
-:: Çalışma dizinini scriptin olduğu yere sabitle
-cd /d "%~dp0"
-echo [BILGI] Yonetici modu aktif.
-echo [BILGI] Calisma dizini: %CD%
-echo.
+:: Çalışma dizinini sabitle
+cd /d "%SCRIPT_DIR%"
+cls
 
 echo ====================================================
 echo.
-echo      EMAIL OTOMASYONU - AKILLI KURULUM
+echo      EMAIL OTOMASYONU - KURULUM
 echo.
 echo ====================================================
 echo.
+echo Calisma dizini: %CD%
+echo.
 
-:: 1. Python Kontrolü
+:: Python kontrolü
 echo [1/3] Python kontrol ediliyor...
 
-:: Python alias kontrolü (Windows Store alias'ı bazen sorun çıkarır)
+:: where komutu ile Python'u bul
 where python >nul 2>&1
 if %errorLevel% neq 0 (
+    echo [UYARI] Python bulunamadi!
     goto :INSTALL_PYTHON
 )
 
+:: Python çalışıyor mu test et
 python --version >nul 2>&1
 if %errorLevel% neq 0 (
+    echo [UYARI] Python yuklu ama calismıyor!
     goto :INSTALL_PYTHON
-) else (
-    echo [BILGI] Python zaten yuklu.
-    goto :START_INSTALL
 )
+
+:: Python bulundu
+for /f "delims=" %%v in ('python --version 2^>^&1') do set "PY_VER=%%v"
+echo [OK] %PY_VER% bulundu.
+goto :START_INSTALL
 
 :INSTALL_PYTHON
 echo.
-echo [UYARI] Python bulunamadi veya calismiyor!
-echo [ISLEM] Python 3.11 otomatik olarak indiriliyor...
-
-:: İndirme
-powershell -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.7/python-3.11.7-amd64.exe' -OutFile '%TEMP%\python_installer.exe'"
+echo [INDIRILIYOR] Python 3.11...
+powershell -NoProfile -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.7/python-3.11.7-amd64.exe' -OutFile '%TEMP%\python_installer.exe'}"
 
 if not exist "%TEMP%\python_installer.exe" (
-    color 0C
-    echo [HATA] Python indirilemedi!
-    echo Lutfen internet baglantinizi kontrol edin.
+    echo [HATA] Indirme basarisiz! Internet baglantinizi kontrol edin.
     pause
     exit /b 1
 )
 
-echo [ISLEM] Python kuruluyor (Bu islem biraz surebilir)...
+echo [KURULUYOR] Python (bu birkaç dakika surebilir)...
 "%TEMP%\python_installer.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
 
-:: PATH güncelleme (Geçici)
+:: PATH güncelleme
 set "PATH=%PATH%;C:\Program Files\Python311\Scripts\;C:\Program Files\Python311\"
 
-:: Tekrar kontrol
+:: Kontrol
+timeout /t 3 >nul
 python --version >nul 2>&1
-if !errorLevel! neq 0 (
-    color 0C
-    echo [HATA] Otomatik kurulum basarisiz oldu.
-    echo Lutfen manuel yukleyin: https://python.org
+if %errorLevel% neq 0 (
+    echo [HATA] Kurulum basarisiz! Manuel yukleyin: https://python.org
     pause
     exit /b 1
 )
 
-echo [BASARILI] Python kuruldu!
+echo [OK] Python kuruldu!
 
 :START_INSTALL
-:: 2. Animasyonlu Kurulum
 echo.
-echo [2/3] Kurulum sihirbazi baslatiliyor...
-timeout /t 2 >nul
+echo [2/3] Bagimliliklar yukleniyor...
 
-if not exist "install_animation.py" (
-    color 0C
-    echo [HATA] install_animation.py dosyasi bulunamadi!
-    echo Lutfen dosyalari eksiksiz indirdiginizden emin olun.
-    pause
-    exit /b 1
+:: Önce install_animation.py var mı kontrol et
+if exist "install_animation.py" (
+    python install_animation.py
+    if errorlevel 1 (
+        echo [UYARI] Animasyon hata verdi, normal devam...
+        goto :MANUAL_INSTALL
+    )
+) else (
+    :MANUAL_INSTALL
+    echo [MANUEL] pip install...
+    python -m pip install --quiet --upgrade pip
+    python -m pip install --quiet customtkinter pillow certifi pyinstaller
 )
 
-python install_animation.py
-if %errorLevel% neq 0 (
-    color 0C
-    echo.
-    echo [HATA] Kurulum sihirbazi hata verdi.
-    echo Hata kodu: %errorLevel%
-    echo.
-    echo Manuel kurulum denemek icin:
-    echo pip install customtkinter pillow certifi pyinstaller
-    pause
-    exit /b 1
-)
-
-:: 3. Derleme
+:: Derleme
 echo.
 echo [3/3] Uygulama derleniyor...
+echo Bu islem 2-3 dakika surebilir...
 echo.
 
+:: Temizlik
 if exist build rmdir /s /q build 2>nul
 if exist dist rmdir /s /q dist 2>nul
 del /q *.spec 2>nul
 
-python -m PyInstaller --name=EmailOtomasyonu --onefile --windowed --icon=icon.ico --hidden-import=customtkinter --collect-all=customtkinter --noconfirm bulk_email_app.py
+:: PyInstaller ile derle
+python -m PyInstaller ^
+    --name=EmailOtomasyonu ^
+    --onefile ^
+    --windowed ^
+    --icon=icon.ico ^
+    --hidden-import=customtkinter ^
+    --collect-all=customtkinter ^
+    --noconfirm ^
+    bulk_email_app.py
 
+:: EXE kontrolü
 if not exist "dist\EmailOtomasyonu.exe" (
-    color 0C
-    echo.
-    echo [HATA] Derleme basarisiz oldu!
+    echo [HATA] Derleme basarisiz!
     pause
     exit /b 1
 )
 
-:: Masaüstüne Kopyalama
-set "TARGET_PATH=%USERPROFILE%\Desktop\EmailOtomasyonu.exe"
-copy /Y "dist\EmailOtomasyonu.exe" "%TARGET_PATH%" >nul 2>&1
+:: Masaüstüne kopyala
+set "DESKTOP=%USERPROFILE%\Desktop"
+copy /Y "dist\EmailOtomasyonu.exe" "%DESKTOP%\EmailOtomasyonu.exe" >nul 2>&1
 
 cls
 echo.
 echo ====================================================
-echo           KURULUM BASARIYLA TAMAMLANDI!
+echo           KURULUM TAMAMLANDI!
 echo ====================================================
 echo.
-if exist "%TARGET_PATH%" (
+
+if exist "%DESKTOP%\EmailOtomasyonu.exe" (
     echo [OK] Uygulama masaustune kopyalandi:
-    echo      %TARGET_PATH%
+    echo      %DESKTOP%\EmailOtomasyonu.exe
 ) else (
     echo [BILGI] Uygulama 'dist' klasorunde hazir.
 )
+
 echo.
 echo Pencereyi kapatabilirsiniz.
 pause
