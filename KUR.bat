@@ -3,8 +3,9 @@ setlocal EnableDelayedExpansion
 title Email Otomasyonu - Akilli Kurulum
 color 0A
 
-:: Çalışma dizinini ayarla (Yönetici modunda System32'de başlamaması için)
-cd /d "%~dp0"
+:: Debug bilgisi
+echo [BASLATIYOR] Kurulum scripti calisiyor...
+echo Calisma dizini: %CD%
 
 :: Yönetici izni kontrolü
 net session >nul 2>&1
@@ -12,21 +13,27 @@ if %errorLevel% == 0 (
     goto :ADMIN_OK
 ) else (
     echo.
-    echo [BILGI] Python otomatik kurulumu icin Yonetici izni gerekiyor...
+    echo [BILGI] Yonetici izni gerekiyor...
     echo Lutfen acilan pencerede "Evet" deyin.
     echo.
-    :: Scripti yönetici olarak yeniden başlat
-    :: %~f0 tam dosya yolunu verir. Tırnak içine alarak boşluklu yolları koruyoruz.
-    powershell -Command "Start-Process cmd -ArgumentList '/c, \"\"%~f0\"\"' -Verb RunAs"
+    
+    :: /k parametresi ile CMD penceresini açık tutuyoruz
+    powershell -Command "Start-Process cmd -ArgumentList '/k, \"\"%~f0\"\"' -Verb RunAs"
+    
+    if %errorLevel% neq 0 (
+        echo [HATA] Yonetici izni alinirken hata olustu!
+        pause
+    )
     exit /b
 )
 
 :ADMIN_OK
-:: Tekrar dizini garantiye al
+:: Çalışma dizinini scriptin olduğu yere sabitle
 cd /d "%~dp0"
-cls
-
+echo [BILGI] Yonetici modu aktif.
+echo [BILGI] Calisma dizini: %CD%
 echo.
+
 echo ====================================================
 echo.
 echo      EMAIL OTOMASYONU - AKILLI KURULUM
@@ -40,24 +47,23 @@ python --version >nul 2>&1
 if %errorLevel% neq 0 (
     echo.
     echo [UYARI] Python bulunamadi!
-    echo [ISLEM] Python 3.11 otomatik olarak indiriliyor ve kuruluyor...
-    echo         Bu islem internet hizina bagli olarak 1-2 dakika surebilir.
-    echo.
+    echo [ISLEM] Python 3.11 otomatik olarak indiriliyor...
     
     :: İndirme
     powershell -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.7/python-3.11.7-amd64.exe' -OutFile '%TEMP%\python_installer.exe'"
     
     if not exist "%TEMP%\python_installer.exe" (
         color 0C
-        echo [HATA] Python indirilemedi! Internet baglantinizi kontrol edin.
+        echo [HATA] Python indirilemedi!
+        echo Lutfen internet baglantinizi kontrol edin.
         pause
         exit /b 1
     )
     
-    echo [ISLEM] Python kuruluyor (Sessiz Mod)...
+    echo [ISLEM] Python kuruluyor (Bu islem biraz surebilir)...
     "%TEMP%\python_installer.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
     
-    :: PATH güncelleme (Geçici)
+    :: PATH güncelleme
     set "PATH=%PATH%;C:\Program Files\Python311\Scripts\;C:\Program Files\Python311\"
     
     :: Tekrar kontrol
@@ -78,12 +84,12 @@ if %errorLevel% neq 0 (
 :: 2. Animasyonlu Kurulum
 echo.
 echo [2/3] Kurulum sihirbazi baslatiliyor...
-timeout /t 1 >nul
+timeout /t 2 >nul
 
-:: install_animation.py var mı kontrol et
 if not exist "install_animation.py" (
     color 0C
     echo [HATA] install_animation.py dosyasi bulunamadi!
+    echo Lutfen dosyalari eksiksiz indirdiginizden emin olun.
     pause
     exit /b 1
 )
@@ -92,8 +98,11 @@ python install_animation.py
 if %errorLevel% neq 0 (
     color 0C
     echo.
-    echo [HATA] Kurulum sihirbazi bir sorunla karsilasti.
+    echo [HATA] Kurulum sihirbazi hata verdi.
     echo Hata kodu: %errorLevel%
+    echo.
+    echo Manuel kurulum denemek icin:
+    echo pip install customtkinter pillow certifi pyinstaller
     pause
     exit /b 1
 )
@@ -134,5 +143,5 @@ if exist "%TARGET_PATH%" (
     echo [BILGI] Uygulama 'dist' klasorunde hazir.
 )
 echo.
-echo Cikmak icin bir tusa basin...
-pause >nul
+echo Pencereyi kapatabilirsiniz.
+pause
