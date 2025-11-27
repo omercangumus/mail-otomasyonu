@@ -308,18 +308,6 @@ class BulkEmailAutomationApp(ctk.CTk):
         self._init_ui()
         self._load_initial_state()
         
-        # Window close handler
-        self.protocol("WM_DELETE_WINDOW", self._on_closing)
-
-    def _setup_window(self):
-        self.title(f"📧 {APP_NAME} v{VERSION}")
-        self.geometry("1150x800")  # Slightly larger for better spacing
-        self.minsize(900, 600)  # Minimum size
-        ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("blue")
-        
-        # Modern colors
-        self._colors = {
             'primary': '#1E88E5',
             'primary_dark': '#1565C0',
             'success': '#2ECC71',
