@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
+import tkinter
 """
 Toplu E-posta Otomasyonu
 Modern ve kullanıcı dostu arayüzle tarih bazlı otomatik toplu e-posta gönderimi.
 """
 
-import customtkinter as ctk
+try:
+    import customtkinter as ctk
+    import certifi
+    from PIL import Image
+except ImportError as e:
+    import tkinter.messagebox as msg
+    import sys
+    root = tkinter.Tk()
+    root.withdraw()
+    msg.showerror("Eksik Kütüphane", f"Gerekli kütüphaneler bulunamadı:\n{str(e)}\n\nLütfen 'KUR.bat' veya 'KUR.command' dosyasını çalıştırın.")
+    sys.exit(1)
+
 import json
 import os
 import smtplib
@@ -16,9 +28,26 @@ from email.mime.base import MIMEBase
 from email import encoders
 from tkinter import messagebox, filedialog
 import re
+import ssl
+import certifi
 
 # Sabitler
-SETTINGS_FILE = "settings.json"
+APP_NAME = "EmailOtomasyonu"
+if os.name == 'nt':  # Windows
+    DATA_DIR = os.path.join(os.getenv('APPDATA'), APP_NAME)
+else:  # Mac/Linux
+    DATA_DIR = os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', APP_NAME)
+
+if not os.path.exists(DATA_DIR):
+    try:
+        os.makedirs(DATA_DIR)
+    except:
+        DATA_DIR = os.path.join(os.path.expanduser('~'), f'.{APP_NAME}')
+        if not os.path.exists(DATA_DIR):
+            os.makedirs(DATA_DIR, exist_ok=True)
+
+SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
+
 DEFAULT_SETTINGS = {
     "smtp_server": "smtp.gmail.com",
     "smtp_port": 587,
@@ -48,6 +77,14 @@ class ModernEmailApp(ctk.CTk):
         # Pencere ayarları
         self.title("📧 Toplu E-posta Otomasyonu")
         self.geometry("1100x750")
+        
+        # İkon ayarı (Windows için)
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
+        if os.path.exists(icon_path):
+            try:
+                self.iconbitmap(icon_path)
+            except:
+                pass # Mac/Linux'ta hata verebilir, yoksay
         
         # Modern tema
         ctk.set_appearance_mode("dark")
@@ -651,6 +688,7 @@ class ModernEmailApp(ctk.CTk):
         # Başlangıç mesajı
         self.log("Uygulama başlatıldı.")
         self.log(f"Ayarlar yüklendi: {len(self.settings['recipients'])} alıcı.")
+        self.log(f"Veri Klasörü: {DATA_DIR}")
     
     def log(self, message):
         """Günlüğe mesaj ekle"""
@@ -781,8 +819,9 @@ class ModernEmailApp(ctk.CTk):
             
             self.log(f"🔌 {server}:{port} test ediliyor...")
             
+            context = ssl.create_default_context(cafile=certifi.where())
             smtp = smtplib.SMTP(server, port)
-            smtp.starttls()
+            smtp.starttls(context=context)
             smtp.login(email, password)
             smtp.quit()
             
@@ -916,8 +955,9 @@ class ModernEmailApp(ctk.CTk):
         failed = 0
         
         try:
+            context = ssl.create_default_context(cafile=certifi.where())
             smtp = smtplib.SMTP(self.settings["smtp_server"], self.settings["smtp_port"])
-            smtp.starttls()
+            smtp.starttls(context=context)
             smtp.login(self.settings["email"], self.settings["password"])
             
             for i, recipient in enumerate(recipients):
@@ -1144,8 +1184,9 @@ class ModernEmailApp(ctk.CTk):
     def _send_single_email_thread(self):
         """Tekli e-posta gönderim thread'i"""
         try:
+            context = ssl.create_default_context(cafile=certifi.where())
             smtp = smtplib.SMTP(self.settings["smtp_server"], self.settings["smtp_port"])
-            smtp.starttls()
+            smtp.starttls(context=context)
             smtp.login(self.settings["email"], self.settings["password"])
             
             msg = MIMEMultipart()
