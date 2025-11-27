@@ -44,7 +44,7 @@ settings.json
 build_windows.bat
 build_mac.sh
 BUILD_INSTRUCTIONS.md
-MAC_*.md
+
 TEK_*.md
 NASIL_*.md
 HIZLI_*.md
