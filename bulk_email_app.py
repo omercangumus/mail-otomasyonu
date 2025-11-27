@@ -9,6 +9,7 @@ import time
 import ssl
 import re
 import logging
+import socket
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -139,11 +140,13 @@ class EmailService:
                 smtp.login(email, password)
             return True, "Bağlantı Başarılı"
         except smtplib.SMTPAuthenticationError:
-            return False, "Kimlik doğrulama hatası. E-posta veya şifre yanlış.\nGmail kullanıyorsanız 'Uygulama Şifresi' kullandığınızdan emin olun."
+            return False, "❌ Kimlik doğrulama hatası!\n\n• E-posta veya şifre yanlış olabilir\n• Gmail kullanıyorsanız 'Uygulama Şifresi' gereklidir\n• Ayarlarınızı kaydettiniz mi kontrol edin"
         except smtplib.SMTPConnectError:
-            return False, "Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edin."
+            return False, "❌ Sunucuya bağlanılamadı!\n\n• İnternet bağlantınızı kontrol edin\n• SMTP sunucu adresini doğrulayın\n• Ayarlarınızı kaydettiniz mi kontrol edin"
+        except socket.gaierror:
+            return False, "❌ Sunucu adresi bulunamadı!\n\n• SMTP sunucu adresini kontrol edin\n• İnternet bağlantınızı doğrulayın\n• Ayarlarınızı kaydettiniz mi kontrol edin"
         except Exception as e:
-            return False, f"Beklenmeyen hata: {str(e)}"
+            return False, f"❌ Beklenmeyen hata: {str(e)}\n\nAyarlarınızı kaydetmeyi deneyin."
 
     @staticmethod
     def send_email(config: Dict, recipient: str, is_single: bool = False) -> tuple[bool, str]:
@@ -240,10 +243,14 @@ class BulkEmailAutomationApp(ctk.CTk):
         super().__init__()
         self.settings_manager = SettingsManager()
         self.email_service = EmailService()
+        self.unsaved_changes = False
         
         self._setup_window()
         self._init_ui()
         self._load_initial_state()
+        
+        # Window close handler
+        self.protocol("WM_DELETE_WINDOW", self._on_closing)
 
     def _setup_window(self):
         self.title(f"📧 {APP_NAME} v{VERSION}")
@@ -650,14 +657,80 @@ class BulkEmailAutomationApp(ctk.CTk):
             self.after(0, lambda: messagebox.showerror("Hata", msg))
             self.after(0, self._log, f"❌ Tekli hata: {msg}")
 
+    def _on_closing(self):
+        """Handle window close event with save confirmation."""
+        if self.unsaved_changes:
+            response = messagebox.askyesnocancel(
+                "Kaydetmeden Çık",
+                "Kaydedilmemiş değişiklikler var!\n\nKaydetmek ister misiniz?"
+            )
+            if response is None:  # Cancel
+                return
+            elif response:  # Yes, save
+                self._save_all_settings()
+        
+        self.destroy()
+    
+    def _save_all_settings(self):
+        """Save all settings before closing."""
+        try:
+            # Update main settings from UI
+            self.settings_manager.set("sender_name", self.ent_sender.get())
+            self.settings_manager.set("smtp_server", self.ent_server.get())
+            self.settings_manager.set("smtp_port", int(self.ent_port.get() or 587))
+            self.settings_manager.set("email", self.ent_email.get())
+            self.settings_manager.set("password", self.ent_pass.get())
+            self.settings_manager.set("subject", self.ent_subject.get())
+            self.settings_manager.set("message", self.txt_message.get("1.0", "end-1c"))
+            self.settings_manager.set("interval_days", int(self.ent_interval.get() or 30))
+            
+            # Save recipients
+            text = self.txt_recipients.get("1.0", "end-1c")
+            recipients = [line.strip() for line in text.split("\n") if line.strip() and "@" in line]
+            self.settings_manager.set("recipients", recipients)
+            
+            # Save single email settings
+            self.settings_manager.set("single_email", self.ent_single_email.get())
+            self.settings_manager.set("single_subject", self.ent_single_subject.get())
+            self.settings_manager.set("single_message", self.txt_single_message.get("1.0", "end-1c"))
+            self.settings_manager.set("single_interval_days", int(self.ent_single_interval.get() or 7))
+            
+            self.settings_manager.save()
+            self.unsaved_changes = False
+            messagebox.showinfo("Başarılı", "Tüm ayarlar kaydedildi!")
+        except Exception as e:
+            messagebox.showerror("Hata", f"Kaydetme hatası: {e}")
+    
+    def _mark_unsaved(self):
+        """Mark that there are unsaved changes."""
+        self.unsaved_changes = True
+
 if __name__ == "__main__":
+    # Global exception handler
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+        messagebox.showerror(
+            "Kritik Hata",
+            f"Bir hata oluştu:\n{exc_type.__name__}: {exc_value}\n\nUygulama kapatılacak."
+        )
+    
+    sys.excepthook = handle_exception
+    
     # Splash Screen
     try:
         splash = SplashScreen()
         splash.mainloop()
     except Exception as e:
+        logging.error(f"Splash error: {e}")
         print(f"Splash error: {e}")
 
     # Main App
-    app = BulkEmailAutomationApp()
-    app.mainloop()
+    try:
+        app = BulkEmailAutomationApp()
+        app.mainloop()
+    except Exception as e:
+        logging.critical(f"Application crashed: {e}")
+        messagebox.showerror("Kritik Hata", f"Uygulama çöktü: {e}")
