@@ -427,7 +427,7 @@ class BulkEmailAutomationApp(ctk.CTk):
     # --- LOGIC ---
 
     def _log(self, msg):
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
         self.txt_log.insert("end", f"[{timestamp}] {msg}\n")
         self.txt_log.see("end")
         logging.info(msg)
