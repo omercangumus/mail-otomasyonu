@@ -3,6 +3,9 @@ setlocal EnableDelayedExpansion
 title Email Otomasyonu - Akilli Kurulum
 color 0A
 
+:: Çalışma dizinini ayarla (Yönetici modunda System32'de başlamaması için)
+cd /d "%~dp0"
+
 :: Yönetici izni kontrolü
 net session >nul 2>&1
 if %errorLevel% == 0 (
@@ -12,11 +15,14 @@ if %errorLevel% == 0 (
     echo [BILGI] Python otomatik kurulumu icin Yonetici izni gerekiyor...
     echo Lutfen acilan pencerede "Evet" deyin.
     echo.
-    powershell -Command "Start-Process '%~0' -Verb RunAs"
+    :: Scripti yönetici olarak yeniden başlat
+    :: %~f0 tam dosya yolunu verir. Tırnak içine alarak boşluklu yolları koruyoruz.
+    powershell -Command "Start-Process cmd -ArgumentList '/c, \"\"%~f0\"\"' -Verb RunAs"
     exit /b
 )
 
 :ADMIN_OK
+:: Tekrar dizini garantiye al
 cd /d "%~dp0"
 cls
 
@@ -28,7 +34,7 @@ echo.
 echo ====================================================
 echo.
 
-:: 1. Python Kontrolü ve Otomatik Kurulum
+:: 1. Python Kontrolü
 echo [1/3] Python kontrol ediliyor...
 python --version >nul 2>&1
 if %errorLevel% neq 0 (
@@ -38,7 +44,7 @@ if %errorLevel% neq 0 (
     echo         Bu islem internet hizina bagli olarak 1-2 dakika surebilir.
     echo.
     
-    :: Python İndirme
+    :: İndirme
     powershell -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.7/python-3.11.7-amd64.exe' -OutFile '%TEMP%\python_installer.exe'"
     
     if not exist "%TEMP%\python_installer.exe" (
@@ -51,7 +57,7 @@ if %errorLevel% neq 0 (
     echo [ISLEM] Python kuruluyor (Sessiz Mod)...
     "%TEMP%\python_installer.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
     
-    :: PATH güncelleme (Geçici olarak bu oturum için)
+    :: PATH güncelleme (Geçici)
     set "PATH=%PATH%;C:\Program Files\Python311\Scripts\;C:\Program Files\Python311\"
     
     :: Tekrar kontrol
@@ -69,31 +75,38 @@ if %errorLevel% neq 0 (
     echo [BILGI] Python zaten yuklu.
 )
 
-:: 2. Animasyonlu Kurulum (Bağımlılıklar)
+:: 2. Animasyonlu Kurulum
 echo.
 echo [2/3] Kurulum sihirbazi baslatiliyor...
 timeout /t 1 >nul
-python install_animation.py
 
-if %errorLevel% neq 0 (
+:: install_animation.py var mı kontrol et
+if not exist "install_animation.py" (
     color 0C
-    echo.
-    echo [HATA] Kurulum sihirbazi bir sorunla karsilasti.
+    echo [HATA] install_animation.py dosyasi bulunamadi!
     pause
     exit /b 1
 )
 
-:: 3. Derleme (Build)
+python install_animation.py
+if %errorLevel% neq 0 (
+    color 0C
+    echo.
+    echo [HATA] Kurulum sihirbazi bir sorunla karsilasti.
+    echo Hata kodu: %errorLevel%
+    pause
+    exit /b 1
+)
+
+:: 3. Derleme
 echo.
-echo [3/3] Uygulama derleniyor (EXE olusturuluyor)...
+echo [3/3] Uygulama derleniyor...
 echo.
 
-:: Temizlik
 if exist build rmdir /s /q build 2>nul
 if exist dist rmdir /s /q dist 2>nul
 del /q *.spec 2>nul
 
-:: Build
 python -m PyInstaller --name=EmailOtomasyonu --onefile --windowed --icon=icon.ico --hidden-import=customtkinter --collect-all=customtkinter --noconfirm bulk_email_app.py
 
 if not exist "dist\EmailOtomasyonu.exe" (
