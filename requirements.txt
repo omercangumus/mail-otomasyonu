@@ -1,3 +1,10 @@
-customtkinter>=5.0.0
+# EmailAI bağımlılıkları
+customtkinter>=5.2.0
 pillow>=9.0.0
 certifi>=2023.7.22
+requests>=2.31.0
+keyring>=24.0.0      # API anahtarlarını/şifreyi güvenli saklar
+pypdf>=4.0.0         # CV (PDF) okumak için — opsiyonel
+# NOT: tkinter pip ile kurulmaz; Windows/Mac'te Python ile birlikte gelir.
+#      Linux'ta:  sudo apt install python3-tk
+# Build için (opsiyonel):  pyinstaller>=6.0
