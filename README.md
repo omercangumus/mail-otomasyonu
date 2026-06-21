@@ -8,6 +8,10 @@
 > (Gemini grounding). Mail adresini doğrulayamadığında "tahmin (doğrulanmadı)" diye
 > açıkça işaretler — `verified`/`guessed`/`unknown`. Her mail göndermeden önce **sen onaylarsın**.
 
+<img width="743" height="537" alt="image" src="https://github.com/user-attachments/assets/ceacfd60-86d3-4556-84cf-20029e362464" />
+
+
+
 ---
 
 ## ✨ Ne yapar?
@@ -79,6 +83,8 @@ Normal Gmail şifren **çalışmaz**. Adımlar:
    - Ton + dil + (istersen HTML) seç → **Araştır & Taslak Üret**.
 4. Her kart için mail/konu/gövdeyi düzenle, mail rozetine bak (`✓`/`≈`/`✗`), **onayla**.
 5. **Onaylananları Gönder**.
+
+   <img width="747" height="545" alt="image" src="https://github.com/user-attachments/assets/06c8de69-743c-42d0-9020-46c464deb1f1" />
 
 ---
 
