@@ -81,31 +81,67 @@ class App(ctk.CTk):
 
     # ===================== SIDEBAR =====================
     def _build_sidebar(self):
-        sb = ctk.CTkFrame(self, width=210, corner_radius=0, fg_color="#161B22")
-        sb.grid(row=0, column=0, sticky="nsew")
-        sb.grid_propagate(False)
+        self.sidebar_frame = ctk.CTkFrame(self, width=210, corner_radius=0, fg_color="#161B22")
+        self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
+        self.sidebar_frame.grid_propagate(False)
 
-        ctk.CTkLabel(sb, text="✉  EmailAI", font=font(22, True)).pack(pady=(26, 6))
-        ctk.CTkLabel(sb, text=t("app_subtitle"), text_color=MUTED,
+        ctk.CTkLabel(self.sidebar_frame, text="✉  EmailAI", font=font(22, True)).pack(pady=(26, 6))
+        ctk.CTkLabel(self.sidebar_frame, text=t("app_subtitle"), text_color=MUTED,
                      font=font(11)).pack(pady=(0, 24))
 
         self.nav = {}
         for key, label, icon in [("compose", t("nav_compose"), "✨"), ("bulk", t("nav_bulk"), "📨"),
                                  ("profile", t("nav_profile"), "👤"), ("settings", t("nav_settings"), "⚙️")]:
-            b = ctk.CTkButton(sb, text=f"  {icon}   {label}", anchor="w", height=44,
+            b = ctk.CTkButton(self.sidebar_frame, text=f"  {icon}   {label}", anchor="w", height=44,
                                corner_radius=10, fg_color="transparent", text_color="#E6EDF3",
                                hover_color="#222B36", font=font(14),
                                command=lambda k=key: self.show(k))
             b.pack(fill="x", padx=14, pady=3)
             self.nav[key] = b
 
-        # durum göstergeleri (alt)
-        status = ctk.CTkFrame(sb, fg_color="transparent")
-        status.pack(side="bottom", fill="x", padx=16, pady=18)
+        # Dil Seçimi (sol panel en alt)
+        lang_frame = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
+        lang_frame.pack(side="bottom", fill="x", padx=16, pady=(10, 18))
+        ctk.CTkLabel(lang_frame, text=t("lang_label") + ":", font=font(12), text_color=MUTED).pack(side="left", padx=(0, 6))
+        
+        lang_list = list(UI_LANG_LABELS.keys())
+        saved_ui_lang = self.s.get("ui_lang", "tr")
+        display_name = UI_LANG_BY_CODE.get(saved_ui_lang, "Türkçe")
+        
+        self.sidebar_lang_opt = ctk.CTkOptionMenu(
+            lang_frame, values=lang_list, width=105, height=28, font=font(12),
+            command=self._on_sidebar_lang_change
+        )
+        self.sidebar_lang_opt.set(display_name)
+        self.sidebar_lang_opt.pack(side="left")
+
+        # durum göstergeleri (alt, dilin hemen üstü)
+        status = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
+        status.pack(side="bottom", fill="x", padx=16, pady=(10, 0))
         self.dot_smtp = ctk.CTkLabel(status, text=t("status_mail") + "—", font=font(12), text_color=MUTED)
         self.dot_smtp.pack(anchor="w", pady=2)
         self.dot_ai = ctk.CTkLabel(status, text=t("status_ai") + "—", font=font(12), text_color=MUTED)
         self.dot_ai.pack(anchor="w", pady=2)
+
+    def _on_sidebar_lang_change(self, display_name):
+        lang_code = UI_LANG_LABELS[display_name]
+        if lang_code != get_ui_lang():
+            active_page = "compose"
+            for k, b in self.nav.items():
+                if b.cget("fg_color") == ACCENT:
+                    active_page = k
+                    break
+            
+            self.s.set("ui_lang", lang_code)
+            self.s.save()
+            set_ui_lang(lang_code)
+            
+            # Eski arayüzü yok et ve yenisini çiz
+            self.sidebar_frame.destroy()
+            self.content.destroy()
+            self._build_sidebar()
+            self._build_content()
+            self.show(active_page)
 
     def _refresh_status(self):
         smtp_ok = bool(self.s.get("email") and self.s.get("smtp_password"))
@@ -194,7 +230,7 @@ class App(ctk.CTk):
         self.o_lang.set(self.s.get("default_lang", "tr"))
         self.o_lang.pack(side="left", padx=8)
         
-        # Length selection dropdown
+        # Uzunluk seçici
         ctk.CTkLabel(row, text=t("length_label"), font=font(12), text_color=MUTED).pack(side="left", padx=(10, 4))
         length_labels = get_length_labels()
         self.o_length = ctk.CTkOptionMenu(row, values=length_labels, width=130)
@@ -529,17 +565,6 @@ class App(ctk.CTk):
         box = ctk.CTkScrollableFrame(p, fg_color="transparent")
         box.pack(fill="both", expand=True)
 
-        # --- Arayüz Dili ---
-        lang_card = self._card(box, t("card_lang"))
-        ctk.CTkLabel(lang_card, text=t("lang_label"), font=font(12), text_color=MUTED).pack(anchor="w", pady=(4, 2))
-        lang_list = list(UI_LANG_LABELS.keys())
-        self.set_ui_lang_opt = ctk.CTkOptionMenu(lang_card, values=lang_list)
-        saved_ui_lang = self.s.get("ui_lang", "tr")
-        display_name = UI_LANG_BY_CODE.get(saved_ui_lang, "Türkçe")
-        self.set_ui_lang_opt.set(display_name)
-        self.set_ui_lang_opt.pack(fill="x")
-        ctk.CTkLabel(lang_card, text=t("lang_restart"), font=font(11), text_color=MUTED, wraplength=620, justify="left").pack(anchor="w", pady=(6, 2))
-
         # --- Mail hesabı ---
         m = self._card(box, t("card_mail"))
         ctk.CTkLabel(m, text=t("service_label"), font=font(12), text_color=MUTED).pack(anchor="w", pady=(4, 2))
@@ -677,11 +702,6 @@ class App(ctk.CTk):
             self.s.set("llm_api_key", self.set_apikey.get())
             self.s.set("use_grounding", bool(self.set_online.get()))
             self.s.set("hunter_api_key", self.set_hunter.get())
-            
-            selected_lang = UI_LANG_LABELS[self.set_ui_lang_opt.get()]
-            self.s.set("ui_lang", selected_lang)
-            set_ui_lang(selected_lang)
-            
             self.s.save()
             self._refresh_status()
             messagebox.showinfo(t("ok_title"), t("settings_saved"))
