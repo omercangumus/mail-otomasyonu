@@ -22,7 +22,7 @@ except ImportError as e:
 
 from core.settings import Settings
 from core import email_service as es, finder, profile as profile_mod
-from core.llm import LLMClient, TONES, MODEL_PRESETS, PROVIDERS
+from core.llm import LLMClient, TONES, MODEL_PRESETS, PROVIDERS, fetch_openrouter_models
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -473,6 +473,13 @@ class App(ctk.CTk):
         self.set_model = ctk.CTkComboBox(a, values=MODEL_PRESETS.get(prov, []))
         self.set_model.set(self.s.get("llm_model") or (MODEL_PRESETS.get(prov, [""])[0]))
         self.set_model.pack(fill="x")
+        self.btn_fetch = ctk.CTkButton(a, text="🔄 OpenRouter'dan tüm modelleri çek",
+                                       height=30, fg_color="transparent", border_width=1,
+                                       border_color=MUTED, text_color=MUTED, hover_color="#222B36",
+                                       font=font(12), command=self._fetch_models)
+        self.btn_fetch.pack(anchor="w", pady=(6, 0))
+        if prov != "openrouter":
+            self.btn_fetch.pack_forget()
         self.set_apikey = self._field(a, "API Anahtarı", "llm_api_key", show="●",
                                       placeholder="kendi anahtarın")
         self.base_wrap = ctk.CTkFrame(a, fg_color="transparent")
@@ -517,6 +524,29 @@ class App(ctk.CTk):
             self.base_wrap.pack(fill="x")
         else:
             self.base_wrap.pack_forget()
+        if prov == "openrouter":
+            self.btn_fetch.pack(anchor="w", pady=(6, 0))
+        else:
+            self.btn_fetch.pack_forget()
+
+    def _fetch_models(self):
+        self.llm_msg.configure(text="modeller çekiliyor…", text_color=MUTED)
+
+        def run():
+            try:
+                ids = fetch_openrouter_models(self.set_apikey.get())
+            except Exception:
+                ids = []
+            if ids:
+                cur = self.set_model.get()
+                self.after(0, lambda: (self.set_model.configure(values=ids),
+                                       self.set_model.set(cur if cur in ids else ids[0]),
+                                       self.llm_msg.configure(text=f"{len(ids)} model yüklendi ✓",
+                                                              text_color=OK)))
+            else:
+                self.after(0, lambda: self.llm_msg.configure(
+                    text="çekilemedi (internet?)", text_color=DANGER))
+        threading.Thread(target=run, daemon=True).start()
 
     def _save_settings(self):
         try:
