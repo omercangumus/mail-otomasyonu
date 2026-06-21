@@ -7,6 +7,20 @@ import re
 import logging
 from typing import Dict, Optional, List
 
+# Kalıp tahmini yapılmaması gereken domain'ler (sosyal medya, platform siteleri)
+_SOCIAL_DOMAINS = {
+    "linkedin.com", "twitter.com", "x.com", "facebook.com", "instagram.com",
+    "github.com", "youtube.com", "medium.com", "tiktok.com", "reddit.com",
+}
+
+
+def _is_social_domain(domain: str) -> bool:
+    """Domain sosyal medya / platform sitesi mi? Kalıp tahmini anlamsız."""
+    if not domain:
+        return False
+    d = domain.lower().lstrip("www.")
+    return any(d == s or d.endswith("." + s) for s in _SOCIAL_DOMAINS)
+
 try:
     import requests
 except Exception:
@@ -95,19 +109,20 @@ def hunter_find(domain: str, full_name: str, api_key: str) -> Optional[Dict]:
 def find_email(full_name: str, domain: Optional[str], hunter_key: str = "",
                llm_found: Optional[str] = None) -> Dict:
     """En iyi maili döndürür: {email, confidence, source}."""
-    # 1) Hunter (en güvenilir)
-    if hunter_key and domain:
+    # 1) LLM araştırma sonucu gerçek mail bulduysa — en öncelikli
+    if llm_found and "@" in llm_found:
+        return {"email": llm_found.strip(), "confidence": "verified",
+                "source": "araştırma (profilde açık mail)", "score": None}
+    # 2) Hunter (en güvenilir harici doğrulama)
+    if hunter_key and domain and not _is_social_domain(domain):
         res = hunter_find(domain, full_name, hunter_key)
         if res:
             res["source"] = "hunter"
             return res
-    # 2) LLM araştırmada sitede yayınlı gerçek mail bulduysa
-    if llm_found and "@" in llm_found:
-        return {"email": llm_found.strip(), "confidence": "guessed",
-                "source": "araştırma", "score": None}
-    # 3) Kalıp tahmini
-    patt = guess_patterns(full_name, domain) if domain else []
-    if patt:
-        return {"email": patt[0], "confidence": "guessed",
-                "source": "kalıp tahmini", "alternatives": patt[1:], "score": None}
+    # 3) Kalıp tahmini — sadece kurumsal domain'lerde (linkedin vb. DEĞİL)
+    if domain and not _is_social_domain(domain):
+        patt = guess_patterns(full_name, domain)
+        if patt:
+            return {"email": patt[0], "confidence": "guessed",
+                    "source": "kalıp tahmini", "alternatives": patt[1:], "score": None}
     return {"email": "", "confidence": "unknown", "source": "—", "score": None}

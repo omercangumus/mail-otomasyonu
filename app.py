@@ -283,7 +283,7 @@ class App(ctk.CTk):
                     name = tgt.split(",")[0].strip()
                     chosen = finder.find_email(
                         name, dom, hunter_key=hunter,
-                        llm_found=res.get("email") if res.get("email_confidence") == "verified" else None)
+                        llm_found=res.get("email") if res.get("email") else None)
                 self.after(0, self._add_card, tgt, res, chosen)
                 self.after(0, self._bump_ai, 1)
             self.after(0, lambda: (self.ai_status.configure(text="✓ Hazır. Düzenle, onayla, gönder."),
