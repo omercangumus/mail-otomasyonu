@@ -36,6 +36,21 @@ def extract_text(path: str) -> str:
             log.error("txt okunamadı: %s", e)
             return ""
 
+    if ext == ".docx":
+        try:
+            import zipfile
+            import xml.etree.ElementTree as ET
+            with zipfile.ZipFile(path) as z:
+                xml_content = z.read("word/document.xml")
+            root = ET.fromstring(xml_content)
+            ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+            text_nodes = root.findall(".//w:t", ns)
+            txt = " ".join(node.text for node in text_nodes if node.text)
+            return _clean(txt)
+        except Exception as e:
+            log.error("docx okuma hatası: %s", e)
+            return ""
+
     if ext == ".pdf":
         # 1) PyMuPDF (en iyi)
         try:

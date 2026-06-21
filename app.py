@@ -73,6 +73,7 @@ class App(ctk.CTk):
         set_ui_lang(self.s.get("ui_lang", "tr"))
         self.draft_cards = []
         self._att = self.s.get("attachment_path", "")
+        self._comp_att = self.s.get("comp_attachment_path", "")
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
         self._build_sidebar()
@@ -252,6 +253,17 @@ class App(ctk.CTk):
         self.sch_compose.pack(side="left")
         ctk.CTkLabel(row, text=t("time_empty"), font=font(11), text_color=MUTED).pack(side="left", padx=6)
 
+        # Attachment row in Compose page
+        att_row = ctk.CTkFrame(op, fg_color="transparent")
+        att_row.pack(fill="x", pady=(10, 0))
+        self.comp_att_lbl = ctk.CTkLabel(att_row, text=t("att_none"), text_color=MUTED, font=font(12))
+        self.comp_att_lbl.pack(side="left", padx=(2, 12))
+        ctk.CTkButton(att_row, text=t("btn_pick_att"), width=80, command=self._pick_comp_att).pack(side="left", padx=4)
+        ctk.CTkButton(att_row, text=t("btn_remove"), width=80, fg_color=DANGER, hover_color="#B91C1C",
+                      command=self._clear_comp_att).pack(side="left", padx=4)
+        if self._comp_att:
+            self.comp_att_lbl.configure(text=t("att_prefix") + os.path.basename(self._comp_att))
+
         self.b_gen = ctk.CTkButton(box, text=t("btn_generate"), height=46, corner_radius=12,
                                    fg_color=ACCENT, hover_color=ACCENT_H, font=font(15, True),
                                    command=self._generate)
@@ -404,7 +416,8 @@ class App(ctk.CTk):
             for c in valid:
                 s, m = es.send_email(cfg["server"], cfg["port"], cfg["email"], cfg["password"],
                                      cfg["sender"], c["mail"].get(), c["subj"].get(),
-                                     c["body"].get("1.0", "end-1c"), html=html)
+                                     c["body"].get("1.0", "end-1c"), html=html,
+                                     attachment_path=self._comp_att or None)
                 ok, err = (ok + 1, err) if s else (ok, err + 1)
                 time.sleep(delay)
             success_prompt = f"Başarılı: {ok}\nHatalı: {err}" if get_ui_lang() == "tr" else f"Success: {ok}\nFailed: {err}"
@@ -456,7 +469,15 @@ class App(ctk.CTk):
                       hover_color="#16A34A", font=font(15, True), command=self._send_bulk).pack(fill="x", pady=(8, 0))
 
     def _pick_att(self):
-        p = filedialog.askopenfilename()
+        p = filedialog.askopenfilename(
+            filetypes=[
+                ("PDF", "*.pdf"),
+                ("Images (Görseller)", "*.png *.jpg *.jpeg"),
+                ("Word Documents (Word)", "*.docx *.doc"),
+                ("Documents (Belgeler)", "*.docx *.doc *.txt *.csv *.xlsx *.pdf"),
+                (t("filetype_all"), "*.*")
+            ]
+        )
         if p:
             self._att = p
             self.s.set("attachment_path", p)
@@ -468,6 +489,28 @@ class App(ctk.CTk):
         self.s.set("attachment_path", "")
         self.s.save()
         self.bk_att.configure(text=t("att_none"))
+
+    def _pick_comp_att(self):
+        p = filedialog.askopenfilename(
+            filetypes=[
+                ("PDF", "*.pdf"),
+                ("Images (Görseller)", "*.png *.jpg *.jpeg"),
+                ("Word Documents (Word)", "*.docx *.doc"),
+                ("Documents (Belgeler)", "*.docx *.doc *.txt *.csv *.xlsx *.pdf"),
+                (t("filetype_all"), "*.*")
+            ]
+        )
+        if p:
+            self._comp_att = p
+            self.s.set("comp_attachment_path", p)
+            self.s.save()
+            self.comp_att_lbl.configure(text=t("att_prefix") + os.path.basename(p))
+
+    def _clear_comp_att(self):
+        self._comp_att = ""
+        self.s.set("comp_attachment_path", "")
+        self.s.save()
+        self.comp_att_lbl.configure(text=t("att_none"))
 
     def _import_bulk(self):
         p = filedialog.askopenfilename(filetypes=[(t("filetype_text"), "*.txt *.csv"), (t("filetype_all"), "*.*")])
@@ -540,11 +583,17 @@ class App(ctk.CTk):
                       hover_color=ACCENT_H, font=font(14, True), command=self._save_profile).pack(fill="x", pady=(8, 0))
 
     def _load_cv(self):
-        path = filedialog.askopenfilename(filetypes=[(t("cv_title"), "*.pdf *.txt *.md"), (t("filetype_all"), "*.*")])
+        path = filedialog.askopenfilename(
+            filetypes=[
+                (t("cv_title"), "*.pdf *.txt *.md *.docx"),
+                ("Word Documents (Word)", "*.docx *.doc"),
+                (t("filetype_all"), "*.*")
+            ]
+        )
         if not path:
             return
         text = profile_mod.extract_text(path)
-        if text == "__NO_PYPDF__":
+        if text == "__NO_PDF_LIB__":
             messagebox.showwarning(t("pdf_title"), t("pdf_msg"))
             return
         if not text.strip():
