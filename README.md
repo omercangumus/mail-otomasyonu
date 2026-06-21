@@ -1,7 +1,144 @@
-# 📧 EmailAI — Akıllı E-posta Asistanı / Smart Email Assistant
+# 📧 EmailAI — Smart Email Assistant / Akıllı E-posta Asistanı
 
-[Türkçe](#türkçe) | [English](#english)
+[English](#english) | [Türkçe](#türkçe)
 
+---
+
+# English
+
+Provide a company/person name → AI **researches** them, writes a **personalized email**, **finds the email address** (if available), and **sends** it. You can also send bulk emails. The sending part works **even without AI**.
+
+> Design principle: AI **does not hallucinate**. It bases email content on real web research (Gemini grounding). When it cannot verify an email address, it clearly flags it as "guessed (unverified)" — `verified`/`guessed`/`unknown`. You **approve** every email before it is sent.
+
+<img width="743" height="537" alt="image" src="https://github.com/user-attachments/assets/ceacfd60-86d3-4556-84cf-20029e362464" />
+
+---
+
+## ✨ What it does
+
+- **AI Mail Tab:** Provide a target list (Name + Company/site, LinkedIn URL, or direct email) + a "brief" (purpose of the email). AI researches each target and drafts a custom, personalized, and ATS-friendly email. Edit, approve, and send.
+  - Use cases: inviting a professor to your thesis defense, job or partnership applications to multiple contacts, event invitations, cold outreach…
+  - **Attachments Support:** You can add attachments (PDF, Word, images, etc.) to the generated drafts before sending.
+- **My Profile Tab:** Upload your CV (PDF/TXT/DOCX) or describe yourself → AI writes emails **in your voice**.
+  - **Word (.docx) Reader:** You can directly upload `.docx` format CVs.
+- **Bulk Send Tab:** Same email to many people. Simple personalization with `{name}`. No LLM required.
+- **Real-Time Auto-Save:** All input fields, targets, profiles, SMTP settings, and API keys are saved automatically in the background as you type or change them.
+- **Dynamic UI Language:** Switch between Turkish and English with a single click in the left sidebar; the entire UI refreshes instantly.
+- **Multi-provider (BYOK):** Bring your own **Gemini**, **OpenRouter**, or **OpenAI-compatible** API key.
+- **Secure:** SMTP passwords and API keys are securely stored in the OS credential manager via `keyring`, and never written to `settings.json`.
+
+---
+
+## 🚀 Getting Started (One-click)
+
+Requires: **Python 3.9+** ([python.org](https://www.python.org/downloads/)).
+Tkinter comes pre-installed with Python on Windows/Mac. Linux requires a manual install (see below).
+
+### Windows
+Double-click `BASLAT.bat` — it creates a virtual environment (venv) and installs dependencies on the first run (takes 2-3 mins), then launches the app directly on subsequent runs.
+
+### macOS
+Double-click `BASLAT.command` (Terminal may open on the first run — this is normal).
+
+### Linux (via Terminal)
+```bash
+chmod +x BASLAT.command   # once
+./BASLAT.command
+```
+**Tkinter on Linux:** `sudo apt install python3-tk` (Debian/Ubuntu) · `sudo dnf install python3-tkinter` (Fedora) · `sudo pacman -S tk` (Arch).
+
+---
+
+## 🔑 Where do I get the keys?
+
+### 1) Gmail "App Password" (for sending emails)
+Your normal Gmail password **will not work**. Steps:
+1. Google Account → Security → Turn on **2-Step Verification**.
+2. [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) → Generate a 16-character App Password.
+3. Settings tab: Enter your email + this app password. **Test SMTP Connection**.
+- Outlook/Other: Enter SMTP server/port accordingly (Gmail: `smtp.gmail.com` / `587`).
+
+### 2) Gemini API Key (for AI — recommended)
+- [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → Get a free key.
+- Settings: Provider `gemini`, Model `gemini-2.5-flash` (or `gemini-3.5-flash`), paste the key, and keep **grounding enabled**.
+- Grounding (web search) comes with a generous monthly free quota on modern models.
+
+### 3) OpenRouter (many models, single key — recommended alternative)
+- [openrouter.ai/keys](https://openrouter.ai/keys) → Get a key. Select **OpenRouter** as provider in Settings.
+- Model: Select from dropdown (Claude, GPT, Gemini, DeepSeek, Llama…) **or** type any model slug manually from openrouter.ai/models.
+- When the **Web Search** checkbox is checked, `:online` is appended to the model slug → model researches the web.
+
+### 4) OpenAI / Custom Endpoint
+- Provider `OpenAI / Custom`, Model (e.g., `gpt-4o-mini`), **Base URL** (compatible endpoint) if needed, and API key.
+
+### 5) Hunter.io (for email discovery — optional)
+- If empty, the app will make a **pattern guess** based on name and domain, and flag it as unverified.
+- For verified emails, go to [hunter.io](https://hunter.io) → get API key (free tier includes ~25 searches/month).
+
+---
+
+## 🧭 Workflow (AI Mail)
+1. Fill out **My Profile** (upload CV / write bio). Saved automatically.
+2. Enter SMTP + LLM keys in **Settings** → test them. Saved automatically.
+3. **AI Mail**:
+   - *Brief*: e.g. "Invite my professor to my MSc thesis defense"
+   - *Targets*: one per line → `John Smith, acme.com`
+   - Select Tone + language + length + (optionally attachments & HTML) → **Research & Generate Draft**.
+4. Review/edit the subject, email body, check the email confidence badge (`✓`/`≈`/`✗`), and **approve**.
+5. **Send Approved**.
+
+   <img width="747" height="545" alt="image" src="https://github.com/user-attachments/assets/06c8de69-743c-42d0-9020-46c464deb1f1" />
+
+---
+
+## 🔒 Security & Legal Compliance
+- Passwords and keys are stored in keyring, never leaked to git/JSON. `settings.json` and `.venv` are ignored.
+- **Responsible outreach:** Cold emails are subject to regulations (GDPR in EU, CAN-SPAM in US, IYS in Turkey). The app adds an opt-out footer and requires manual human review before sending — but sending to **opted-in lists** is your responsibility.
+
+---
+
+## 📦 Packaging .exe / .app (PyInstaller)
+
+| Platform | Command | Output |
+|----------|---------|--------|
+| Windows | `build.bat` | `dist\EmailAI.exe` |
+| macOS | `./build.sh` | `dist/EmailAI.app` |
+| Linux | `./build.sh` | `dist/EmailAI` |
+
+---
+
+## 🛠 Troubleshooting
+| Issue | Solution |
+|------|----------|
+| `No module named tkinter` | Linux: install `python3-tk`. Win/Mac: reinstall Python. |
+| Gmail "Authentication" Error | Use Google App Password (not normal password) with 2FA turned on. |
+| AI provided "fake email" | Add Hunter.io API key, or manually verify `≈ guessed` emails. |
+| Grounding expensive/limits | Use a cheaper model (Flash) or turn off grounding (lowers research quality). |
+| PDF not reading | Make sure `pypdf` and `pymupdf` are installed, or paste CV as text. |
+| SmartScreen/Gatekeeper | Win: Click "Run anyway". Mac: Run `xattr -cr dist/EmailAI.app`. |
+
+---
+
+## 🗂 File Structure
+```
+app.py                        # GUI (sidebar: Compose · Bulk · Profile · Settings)
+core/
+  settings.py                 # Settings manager + keyring
+  email_service.py            # SMTP sending (SSL/STARTTLS auto, Unicode support)
+  llm.py                      # Gemini · OpenRouter · OpenAI-compatible client
+  finder.py                   # Hunter.io + email pattern guesser (skips social media)
+  profile.py                  # CV reader (PDF/TXT/DOCX)
+  i18n.py                     # Multi-language translations (TR / EN)
+BASLAT.bat / BASLAT.command   # One-click launchers (Win / Mac-Linux)
+build.bat / build.sh          # Packaging executable files via PyInstaller
+requirements.txt
+```
+
+---
+
+Good sending! 🚀
+
+---
 ---
 
 # Türkçe
@@ -131,134 +268,5 @@ requirements.txt
 ```
 
 ---
----
 
-# English
-
-Provide a company/person name → AI **researches** them, writes a **personalized email**, **finds the email address** (if available), and **sends** it. You can also send bulk emails. The sending part works **even without AI**.
-
-> Design principle: AI **does not hallucinate**. It bases email content on real web research (Gemini grounding). When it cannot verify an email address, it clearly flags it as "guessed (unverified)" — `verified`/`guessed`/`unknown`. You **approve** every email before it is sent.
-
----
-
-## ✨ What it does
-
-- **AI Mail Tab:** Provide a target list (Name + Company/site, LinkedIn URL, or direct email) + a "brief" (purpose of the email). AI researches each target and drafts a custom, personalized, and ATS-friendly email. Edit, approve, and send.
-  - Use cases: inviting a professor to your thesis defense, job or partnership applications to multiple contacts, event invitations, cold outreach…
-  - **Attachments Support:** You can add attachments (PDF, Word, images, etc.) to the generated drafts before sending.
-- **My Profile Tab:** Upload your CV (PDF/TXT/DOCX) or describe yourself → AI writes emails **in your voice**.
-  - **Word (.docx) Reader:** You can directly upload `.docx` format CVs.
-- **Bulk Send Tab:** Same email to many people. Simple personalization with `{name}`. No LLM required.
-- **Real-Time Auto-Save:** All input fields, targets, profiles, SMTP settings, and API keys are saved automatically in the background as you type or change them.
-- **Dynamic UI Language:** Switch between Turkish and English with a single click in the left sidebar; the entire UI refreshes instantly.
-- **Multi-provider (BYOK):** Bring your own **Gemini**, **OpenRouter**, or **OpenAI-compatible** API key.
-- **Secure:** SMTP passwords and API keys are securely stored in the OS credential manager via `keyring`, and never written to `settings.json`.
-
----
-
-## 🚀 Getting Started (One-click)
-
-Requires: **Python 3.9+** ([python.org](https://www.python.org/downloads/)).
-Tkinter comes pre-installed with Python on Windows/Mac. Linux requires a manual install (see below).
-
-### Windows
-Double-click `BASLAT.bat` — it creates a virtual environment (venv) and installs dependencies on the first run (takes 2-3 mins), then launches the app directly on subsequent runs.
-
-### macOS
-Double-click `BASLAT.command` (Terminal may open on the first run — this is normal).
-
-### Linux (via Terminal)
-```bash
-chmod +x BASLAT.command   # once
-./BASLAT.command
-```
-**Tkinter on Linux:** `sudo apt install python3-tk` (Debian/Ubuntu) · `sudo dnf install python3-tkinter` (Fedora) · `sudo pacman -S tk` (Arch).
-
----
-
-## 🔑 Where do I get the keys?
-
-### 1) Gmail "App Password" (for sending emails)
-Your normal Gmail password **will not work**. Steps:
-1. Google Account → Security → Turn on **2-Step Verification**.
-2. [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) → Generate a 16-character App Password.
-3. Settings tab: Enter your email + this app password. **Test SMTP Connection**.
-- Outlook/Other: Enter SMTP server/port accordingly (Gmail: `smtp.gmail.com` / `587`).
-
-### 2) Gemini API Key (for AI — recommended)
-- [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → Get a free key.
-- Settings: Provider `gemini`, Model `gemini-2.5-flash` (or `gemini-3.5-flash`), paste the key, and keep **grounding enabled**.
-- Grounding (web search) comes with a generous monthly free quota on modern models.
-
-### 3) OpenRouter (many models, single key — recommended alternative)
-- [openrouter.ai/keys](https://openrouter.ai/keys) → Get a key. Select **OpenRouter** as provider in Settings.
-- Model: Select from dropdown (Claude, GPT, Gemini, DeepSeek, Llama…) **or** type any model slug manually from openrouter.ai/models.
-- When the **Web Search** checkbox is checked, `:online` is appended to the model slug → model researches the web.
-
-### 4) OpenAI / Custom Endpoint
-- Provider `OpenAI / Custom`, Model (e.g., `gpt-4o-mini`), **Base URL** (compatible endpoint) if needed, and API key.
-
-### 5) Hunter.io (for email discovery — optional)
-- If empty, the app will make a **pattern guess** based on name and domain, and flag it as unverified.
-- For verified emails, go to [hunter.io](https://hunter.io) → get API key (free tier includes ~25 searches/month).
-
----
-
-## 🧭 Workflow (AI Mail)
-1. Fill out **My Profile** (upload CV / write bio). Saved automatically.
-2. Enter SMTP + LLM keys in **Settings** → test them. Saved automatically.
-3. **AI Mail**:
-   - *Brief*: e.g. "Invite my professor to my MSc thesis defense"
-   - *Targets*: one per line → `John Smith, acme.com`
-   - Select Tone + language + length + (optionally attachments & HTML) → **Research & Generate Draft**.
-4. Review/edit the subject, email body, check the email confidence badge (`✓`/`≈`/`✗`), and **approve**.
-5. **Send Approved**.
-
----
-
-## 🔒 Security & Legal Compliance
-- Passwords and keys are stored in keyring, never leaked to git/JSON. `settings.json` and `.venv` are ignored.
-- **Responsible outreach:** Cold emails are subject to regulations (GDPR in EU, CAN-SPAM in US, IYS in Turkey). The app adds an opt-out footer and requires manual human review before sending — but sending to **opted-in lists** is your responsibility.
-
----
-
-## 📦 Packaging .exe / .app (PyInstaller)
-
-| Platform | Command | Output |
-|----------|---------|--------|
-| Windows | `build.bat` | `dist\EmailAI.exe` |
-| macOS | `./build.sh` | `dist/EmailAI.app` |
-| Linux | `./build.sh` | `dist/EmailAI` |
-
----
-
-## 🛠 Troubleshooting
-| Issue | Solution |
-|------|----------|
-| `No module named tkinter` | Linux: install `python3-tk`. Win/Mac: reinstall Python. |
-| Gmail "Authentication" Error | Use Google App Password (not normal password) with 2FA turned on. |
-| AI provided "fake email" | Add Hunter.io API key, or manually verify `≈ guessed` emails. |
-| Grounding expensive/limits | Use a cheaper model (Flash) or turn off grounding (lowers research quality). |
-| PDF not reading | Make sure `pypdf` and `pymupdf` are installed, or paste CV as text. |
-| SmartScreen/Gatekeeper | Win: Click "Run anyway". Mac: Run `xattr -cr dist/EmailAI.app`. |
-
----
-
-## 🗂 File Structure
-```
-app.py                        # GUI (sidebar: Compose · Bulk · Profile · Settings)
-core/
-  settings.py                 # Settings manager + keyring
-  email_service.py            # SMTP sending (SSL/STARTTLS auto, Unicode support)
-  llm.py                      # Gemini · OpenRouter · OpenAI-compatible client
-  finder.py                   # Hunter.io + email pattern guesser (skips social media)
-  profile.py                  # CV reader (PDF/TXT/DOCX)
-  i18n.py                     # Multi-language translations (TR / EN)
-BASLAT.bat / BASLAT.command   # One-click launchers (Win / Mac-Linux)
-build.bat / build.sh          # Packaging executable files via PyInstaller
-requirements.txt
-```
-
----
-
-Good sending! 🚀
+İyi gönderimler! 🚀
