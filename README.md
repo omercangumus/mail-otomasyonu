@@ -16,7 +16,7 @@
   - Kullanım örnekleri: hocana tez savunması daveti, birden çok kişiye iş/işbirliği maili, etkinlik daveti, soğuk outreach…
 - **Profilim sekmesi:** CV (PDF/TXT) yükle ya da kendini anlat → AI mailleri **senin ağzından** yazar.
 - **Toplu Gönderim sekmesi:** Aynı maili çok kişiye. `{ad}` ile basit kişiselleştirme. LLM gerekmez.
-- **Çoklu sağlayıcı (BYOK):** Kendi **Gemini** veya **OpenAI-uyumlu** API anahtarını getirirsin.
+- **Çoklu sağlayıcı (BYOK):** Kendi **Gemini**, **OpenRouter** veya **OpenAI-uyumlu** API anahtarını getirirsin.
 - **Güvenli:** Şifre ve API anahtarları `keyring` ile işletim sisteminin kasasında saklanır, `settings.json`'a **yazılmaz**.
 
 ---
@@ -42,22 +42,6 @@ chmod +x BASLAT.command   # bir kez
 
 ---
 
-## 📦 Paylaşım için .exe / .app üretme
-
-Son kullanıcılara Python kurdurmak istemiyorsan kendi bilgisayarında çalıştırılabilir dosya üretebilirsin.
-PyInstaller **çapraz derlemez** — her platform kendi dosyasını kendi makinesinde üretir.
-
-| Platform | Komut | Çıktı |
-|----------|-------|-------|
-| Windows | `build.bat` | `dist\EmailAI.exe` |
-| macOS | `./build.sh` | `dist/EmailAI.app` |
-| Linux | `./build.sh` | `dist/EmailAI` |
-
-Üretilen dosyayı (`.exe` veya `.app`) kullanıcıyla paylaş; karşı tarafta Python kurulu olmak zorunda değil.
-İkon eklemek istersen: `icon.ico` (Win), `icon.icns` (Mac), `icon.png` (Linux) koy ve build scriptini güncelle.
-
----
-
 ## 🔑 Anahtarları nereden alırım?
 
 ### 1) Gmail "Uygulama Şifresi" (mail göndermek için)
@@ -72,11 +56,15 @@ Normal Gmail şifren **çalışmaz**. Adımlar:
 - Ayarlar: Sağlayıcı `gemini`, Model `gemini-2.5-flash` (veya yeni `gemini-3.5-flash`), anahtarı yapıştır, **grounding açık**.
 - Grounding (web araması) güncel modellerde aylık geniş ücretsiz kotayla gelir; aşınca sorgu başına ücretlenir.
 
-### 3) OpenAI-uyumlu (alternatif)
-- Sağlayıcı `openai`, Model (örn. `gpt-4o-mini`), gerekiyorsa **Base URL** (kendi/uyumlu endpoint), anahtar.
-- Not: bu modda Google grounding yoktur; araştırma modelin kendi bilgisiyle sınırlı kalır.
+### 3) OpenRouter (çok model, tek anahtar — önerilen alternatif)
+- [openrouter.ai/keys](https://openrouter.ai/keys) → anahtar al. Ayarlar'da sağlayıcı **OpenRouter** seç.
+- Model: açılır listeden seç (Claude, GPT, Gemini, DeepSeek, Llama…) **ya da** openrouter.ai/models'tan kopyaladığın herhangi bir slug'ı elle yaz. Slug'lar zaman zaman değişir; takılırsan listeden güncelini al.
+- **İnternet araması** kutusu açıkken model slug'ına otomatik `:online` eklenir → model web'de araştırır (grounding benzeri).
 
-### 4) Hunter.io (gerçek mail bulmak için — opsiyonel)
+### 4) OpenAI / Özel endpoint
+- Sağlayıcı `OpenAI / Özel`, Model (örn. `gpt-4o-mini`), gerekiyorsa **Base URL** (uyumlu endpoint), anahtar.
+
+### 5) Hunter.io (gerçek mail bulmak için — opsiyonel)
 - Anahtar yoksa app, ad+domain'den **kalıp tahmini** yapar ve "doğrulanmadı" işaretler.
 - Gerçek/doğrulanmış mail için [hunter.io](https://hunter.io) → API anahtarı (ücretsiz tier ayda ~25 arama). Ayarlar'a yapıştır.
 
@@ -101,6 +89,22 @@ Normal Gmail şifren **çalışmaz**. Adımlar:
 
 ---
 
+## 📦 Paylaşım için .exe / .app üretme
+
+Son kullanıcılara Python kurdurmak istemiyorsan kendi bilgisayarında çalıştırılabilir dosya üretebilirsin.
+PyInstaller **çapraz derlemez** — her platform kendi dosyasını kendi makinesinde üretir.
+
+| Platform | Komut | Çıktı |
+|----------|-------|-------|
+| Windows | `build.bat` | `dist\EmailAI.exe` |
+| macOS | `./build.sh` | `dist/EmailAI.app` |
+| Linux | `./build.sh` | `dist/EmailAI` |
+
+Üretilen dosyayı (`.exe` veya `.app`) kullanıcıyla paylaş; karşı tarafta Python kurulu olmak zorunda değil.
+İkon eklemek istersen: `icon.ico` (Win), `icon.icns` (Mac), `icon.png` (Linux) koy ve build scriptini güncelle.
+
+---
+
 ## 🛠 Sorun giderme
 | Sorun | Çözüm |
 |------|-------|
@@ -115,13 +119,13 @@ Normal Gmail şifren **çalışmaz**. Adımlar:
 
 ## 🗂 Dosya yapısı
 ```
-app.py                 # arayüz (sekmeler)
+app.py                        # arayüz (sol menü: Oluştur · Toplu · Profil · Ayarlar)
 core/
-  settings.py          # ayarlar + keyring
-  email_service.py     # SMTP gönderim (plain/HTML, ek)
-  llm.py               # Gemini(grounding) + OpenAI-uyumlu
-  finder.py            # Hunter + kalıp tahmini
-  profile.py           # CV/PDF metin çıkarımı
+  settings.py                 # ayarlar + keyring
+  email_service.py            # SMTP gönderim (SSL/STARTTLS otomatik, Türkçe ad desteği)
+  llm.py                      # Gemini · OpenRouter · OpenAI-uyumlu
+  finder.py                   # Hunter + kalıp tahmini
+  profile.py                  # CV/PDF metin çıkarımı
 BASLAT.bat / BASLAT.command   # tek tıkla başlatıcı (Win / Mac-Linux)
 build.bat / build.sh          # PyInstaller ile .exe/.app üretme
 requirements.txt
