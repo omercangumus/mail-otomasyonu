@@ -43,6 +43,7 @@ DEFAULTS: Dict[str, Any] = {
     "default_lang": "tr",
     "send_as_html": False,
     "send_delay_sec": 2.0,             # spam'a takılmamak için
+    "ai_requests": 0,                  # toplam AI istek sayacı
     # son toplu mail içeriği (kolaylık)
     "bulk_subject": "",
     "bulk_message": "",

@@ -85,21 +85,28 @@ def fetch_openrouter_models(api_key: str = ""):
 def _system_prompt(brief, profile, tone, lang, signature):
     tone_desc = TONES.get(tone, TONES["samimi"])
     lang_name = "Türkçe" if lang == "tr" else "İngilizce"
-    prof = f"\n\nGÖNDERENİN PROFİLİ (mailleri bu kişinin ağzından yaz):\n{profile.strip()}" if profile else ""
+    prof = (f"\n\nGÖNDERENİN PROFİLİ (mailleri bu kişinin ağzından, onun deneyim/becerilerine "
+            f"atıfla yaz; metinde PDF'den gelen biçim bozuklukları olabilir, anlamlı yorumla):\n"
+            f"{profile.strip()}") if profile else ""
     sig = f"\n\nİMZA olarak şunu kullan:\n{signature.strip()}" if signature else ""
-    return f"""Sen bir e-posta asistanısın. Görevin: verilen hedef kişi/kurumu \
-araştırıp, ona özel, kişiselleştirilmiş bir e-posta taslağı yazmak.
+    return f"""Sen deneyimli bir e-posta asistanısın. Görevin: verilen hedefi araştırıp, \
+ona özel, AKICI ve doğal bir e-posta yazmak.
 
 KURALLAR:
 - Dil: {lang_name}. Üslup: {tone_desc}.
-- Hedefle ilgili GERÇEK bilgiyi kullan. Bilgi yoksa uydurma; genel ama dürüst yaz.
+- Mail kişisel ve spesifik olsun: hedefin kurumuna/rolüne ve gönderenin profiline somut \
+atıf yap. Klişe, jenerik, şablon kokan cümlelerden kaçın.
+- Hedef bir URL ise (ör. LinkedIn profili veya web sitesi), o sayfayı/kişiyi araştır; \
+kişinin adını, rolünü, şirketini ve ilgili detayları çıkar ve maile yansıt.
+- GERÇEK bilgi kullan; bilmediğini uydurma, dürüst ve genel geç.
+- Konu kısa ve dikkat çekici olsun. Gövde 2-4 kısa paragraf, net bir kapanış/çağrı içersin.
 - E-posta adresi için: yalnızca açıkça yayınlanmış gerçek bir adres bulursan ver ve \
 "verified" işaretle. Bulamazsan email'i boş bırak ("unknown"); ADRES UYDURMA.
 - Çıktıyı SADECE şu JSON ile ver, başka hiçbir şey yazma:
 {{"email":"<gerçek mail veya boş>","email_confidence":"verified|unknown",
-"subject":"<konu>","body":"<mail gövdesi>","research_notes":"<1-2 cümle ne buldun>"}}
+"subject":"<konu>","body":"<mail gövdesi>","research_notes":"<1-2 cümle: hedef hakkında ne buldun>"}}
 
-GÖNDEREN İSTEĞİ (mailin amacı): {brief.strip()}{prof}{sig}"""
+GÖNDERENİN İSTEĞİ (mailin amacı/konusu): {brief.strip()}{prof}{sig}"""
 
 
 def _parse_json(text: str) -> Optional[Dict]:
@@ -166,7 +173,8 @@ class LLMClient:
                f"{model}:generateContent?key={self.api_key}")
         body = {"contents": [{"parts": [{"text": prompt}]}]}
         if web:
-            body["tools"] = [{"google_search": {}}]
+            # google_search: arama · url_context: prompttaki linkleri (LinkedIn vb.) okur
+            body["tools"] = [{"google_search": {}}, {"url_context": {}}]
         r = requests.post(url, json=body, timeout=60)
         if r.status_code != 200:
             raise RuntimeError(f"Gemini {r.status_code}: {r.text[:300]}")
