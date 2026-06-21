@@ -13,6 +13,10 @@ jobs:
           python-version: '3.11'
       - name: Build
         run: |
-          pip install customtkinter pillow pyinstaller
-          pyinstaller --onefile --windowed bulk_email_app.py
+          pip install -r requirements.txt pyinstaller
+          pyinstaller --onefile --windowed `
+            --hidden-import=keyring.backends.Windows `
+            --hidden-import=keyring.backends.fail `
+            --collect-all=customtkinter `
+            app.py
           dir dist

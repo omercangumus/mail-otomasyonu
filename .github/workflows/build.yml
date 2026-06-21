@@ -10,22 +10,29 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install customtkinter pillow
+          pip install -r requirements.txt
           pip install pyinstaller
-      
+
       - name: Build Windows executable
         run: |
-          pyinstaller --name="Email_Otomasyonu" --onefile --windowed --hidden-import=customtkinter --hidden-import=PIL._tkinter_finder --collect-all=customtkinter --noconfirm bulk_email_app.py
-      
+          pyinstaller --name="Email_Otomasyonu" --onefile --windowed `
+            --hidden-import=customtkinter `
+            --hidden-import=PIL._tkinter_finder `
+            --hidden-import=keyring.backends.Windows `
+            --hidden-import=keyring.backends.fail `
+            --collect-all=customtkinter `
+            --noconfirm `
+            app.py
+
       - name: Check if exe exists
         run: |
           if (Test-Path "dist/Email_Otomasyonu.exe") {
@@ -35,7 +42,7 @@ jobs:
             Write-Host "❌ EXE not found"
             exit 1
           }
-      
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
@@ -46,22 +53,29 @@ jobs:
     runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          pip3 install customtkinter pillow
+          pip3 install -r requirements.txt
           pip3 install pyinstaller
-      
+
       - name: Build macOS application
         run: |
-          python3 -m PyInstaller --name="Email_Otomasyonu" --onefile --windowed --hidden-import=customtkinter --hidden-import=PIL._tkinter_finder --collect-all=customtkinter --noconfirm bulk_email_app.py
-      
+          python3 -m PyInstaller --name="Email_Otomasyonu" --onefile --windowed \
+            --hidden-import=customtkinter \
+            --hidden-import=PIL._tkinter_finder \
+            --hidden-import=keyring.backends.macOS \
+            --hidden-import=keyring.backends.fail \
+            --collect-all=customtkinter \
+            --noconfirm \
+            app.py
+
       - name: Check if app exists
         run: |
           if [ -d "dist/Email_Otomasyonu.app" ]; then
@@ -71,12 +85,12 @@ jobs:
             echo "❌ APP not found"
             exit 1
           fi
-      
+
       - name: Compress app for upload
         run: |
           cd dist
           zip -r Email_Otomasyonu_Mac.zip Email_Otomasyonu.app
-      
+
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
