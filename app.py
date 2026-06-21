@@ -211,46 +211,58 @@ class App(ctk.CTk):
                      font=font(12), text_color=MUTED).pack(anchor="w", pady=(8, 2))
         self.t_brief = ctk.CTkTextbox(ip, height=70, font=font(13))
         self.t_brief.pack(fill="x")
+        self.t_brief.insert("1.0", self.s.get("compose_brief", ""))
+        self.t_brief.bind("<KeyRelease>", self._auto_save_compose)
 
         tp = self._card(box, t("card_target"))
         self.t_targets = ctk.CTkTextbox(tp, height=90, font=font(13))
         self.t_targets.pack(fill="x")
-        self.t_targets.insert("1.0", t("target_ph"))
+        self.t_targets.insert("1.0", self.s.get("compose_targets", t("target_ph")))
+        self.t_targets.bind("<KeyRelease>", self._auto_save_compose)
 
         op = self._card(box, t("card_tone"))
         row = ctk.CTkFrame(op, fg_color="transparent")
         row.pack(fill="x")
         
         tone_labels = get_tone_labels()
-        self.o_tone = ctk.CTkOptionMenu(row, values=list(tone_labels.values()), width=110)
+        self.o_tone = ctk.CTkOptionMenu(row, values=list(tone_labels.values()), width=110, command=self._on_compose_change)
         def_tone_key = self.s.get("default_tone", "samimi")
         self.o_tone.set(tone_labels.get(def_tone_key, tone_labels.get("samimi", "Samimi")))
         self.o_tone.pack(side="left", padx=(0, 8))
         
-        self.o_lang = ctk.CTkOptionMenu(row, values=["tr", "en"], width=70)
+        self.o_lang = ctk.CTkOptionMenu(row, values=["tr", "en"], width=70, command=self._on_compose_change)
         self.o_lang.set(self.s.get("default_lang", "tr"))
         self.o_lang.pack(side="left", padx=8)
         
         # Uzunluk seçici
         ctk.CTkLabel(row, text=t("length_label"), font=font(12), text_color=MUTED).pack(side="left", padx=(10, 4))
         length_labels = get_length_labels()
-        self.o_length = ctk.CTkOptionMenu(row, values=length_labels, width=130)
-        med_label = ""
-        for lbl in length_labels:
-            if length_value_from_label(lbl) == "medium":
-                med_label = lbl
-                break
-        if not med_label:
-            med_label = length_labels[1] if len(length_labels) > 1 else length_labels[0]
-        self.o_length.set(med_label)
+        self.o_length = ctk.CTkOptionMenu(row, values=length_labels, width=130, command=self._on_compose_change)
+        
+        saved_len = self.s.get("compose_length", "")
+        if saved_len in length_labels:
+            self.o_length.set(saved_len)
+        else:
+            med_label = ""
+            for lbl in length_labels:
+                if length_value_from_label(lbl) == "medium":
+                    med_label = lbl
+                    break
+            if not med_label:
+                med_label = length_labels[1] if len(length_labels) > 1 else length_labels[0]
+            self.o_length.set(med_label)
         self.o_length.pack(side="left", padx=8)
         
-        self.c_html = ctk.CTkCheckBox(row, text=t("html_label"))
+        self.c_html = ctk.CTkCheckBox(row, text=t("html_label"), command=self._on_compose_change)
+        if self.s.get("compose_html", False):
+            self.c_html.select()
         self.c_html.pack(side="left", padx=10)
         
         ctk.CTkLabel(row, text=t("time_label"), font=font(12), text_color=MUTED).pack(side="left", padx=(14, 4))
         self.sch_compose = ctk.CTkEntry(row, width=80, placeholder_text="HH:MM")
+        self.sch_compose.insert(0, self.s.get("compose_schedule", ""))
         self.sch_compose.pack(side="left")
+        self.sch_compose.bind("<KeyRelease>", self._auto_save_compose)
         ctk.CTkLabel(row, text=t("time_empty"), font=font(11), text_color=MUTED).pack(side="left", padx=6)
 
         # Attachment row in Compose page
@@ -292,6 +304,20 @@ class App(ctk.CTk):
         self.t_brief.delete("1.0", "end")
         if tmpl:
             self.t_brief.insert("1.0", tmpl)
+        self._auto_save_compose()
+
+    def _on_compose_change(self, val=None):
+        self._auto_save_compose()
+
+    def _auto_save_compose(self, event=None):
+        self.s.set("compose_brief", self.t_brief.get("1.0", "end-1c"))
+        self.s.set("compose_targets", self.t_targets.get("1.0", "end-1c"))
+        self.s.set("default_tone", tone_key_from_label(self.o_tone.get()))
+        self.s.set("default_lang", self.o_lang.get())
+        self.s.set("compose_length", self.o_length.get())
+        self.s.set("compose_html", bool(self.c_html.get()))
+        self.s.set("compose_schedule", self.sch_compose.get())
+        self.s.save()
 
     def _bump_ai(self, n=1):
         self.s.set("ai_requests", int(self.s.get("ai_requests", 0)) + n)
@@ -435,17 +461,22 @@ class App(ctk.CTk):
         self.bk_subj = ctk.CTkEntry(ip, placeholder_text=t("subject_ph"), height=36)
         self.bk_subj.pack(fill="x", pady=(0, 6))
         self.bk_subj.insert(0, self.s.get("bulk_subject", ""))
+        self.bk_subj.bind("<KeyRelease>", self._auto_save_bulk)
         ctk.CTkLabel(ip, text=t("bulk_msg_label"), text_color=MUTED, font=font(12)).pack(anchor="w")
         self.bk_msg = ctk.CTkTextbox(ip, height=140, font=font(13))
         self.bk_msg.pack(fill="x", pady=4)
         self.bk_msg.insert("1.0", self.s.get("bulk_message", ""))
-        self.bk_html = ctk.CTkCheckBox(ip, text=t("html_send"))
+        self.bk_msg.bind("<KeyRelease>", self._auto_save_bulk)
+        self.bk_html = ctk.CTkCheckBox(ip, text=t("html_send"), command=self._auto_save_bulk)
+        if self.s.get("bulk_html", False):
+            self.bk_html.select()
         self.bk_html.pack(anchor="w", pady=6)
 
         rp = self._card(box, t("card_recipients"))
         self.bk_to = ctk.CTkTextbox(rp, height=130, font=font(13))
         self.bk_to.pack(fill="x")
         self.bk_to.insert("1.0", "\n".join(self.s.get("bulk_recipients", [])))
+        self.bk_to.bind("<KeyRelease>", self._auto_save_bulk)
         rr = ctk.CTkFrame(rp, fg_color="transparent")
         rr.pack(fill="x", pady=8)
         ctk.CTkButton(rr, text=t("btn_import"), width=140, command=self._import_bulk).pack(side="left", padx=4)
@@ -462,7 +493,9 @@ class App(ctk.CTk):
         ctk.CTkLabel(sch, text=t("schedule_label"), font=font(12),
                      text_color=MUTED).pack(side="left", padx=(2, 6))
         self.sch_bulk = ctk.CTkEntry(sch, width=90, placeholder_text="HH:MM")
+        self.sch_bulk.insert(0, self.s.get("bulk_schedule", ""))
         self.sch_bulk.pack(side="left")
+        self.sch_bulk.bind("<KeyRelease>", self._auto_save_bulk)
         ctk.CTkLabel(sch, text=t("schedule_note"), font=font(11),
                      text_color=MUTED).pack(side="left", padx=8)
         ctk.CTkButton(p, text=t("btn_bulk_send"), height=46, corner_radius=12, fg_color=OK,
@@ -521,8 +554,18 @@ class App(ctk.CTk):
                 lines = [l.strip() for l in f if "@" in l]
             self.bk_to.delete("1.0", "end")
             self.bk_to.insert("1.0", "\n".join(lines))
+            self._auto_save_bulk()
         except Exception as e:
             messagebox.showerror(t("error_title"), str(e))
+
+    def _auto_save_bulk(self, event=None):
+        self.s.set("bulk_subject", self.bk_subj.get())
+        self.s.set("bulk_message", self.bk_msg.get("1.0", "end-1c"))
+        self.s.set("bulk_html", bool(self.bk_html.get()))
+        lines = [l.strip() for l in self.bk_to.get("1.0", "end-1c").splitlines() if l.strip()]
+        self.s.set("bulk_recipients", lines)
+        self.s.set("bulk_schedule", self.sch_bulk.get())
+        self.s.save()
 
     def _send_bulk(self):
         cfg = self._smtp_cfg()
@@ -569,15 +612,17 @@ class App(ctk.CTk):
         rr.pack(fill="x", pady=(0, 6))
         ctk.CTkButton(rr, text=t("btn_upload_cv"), command=self._load_cv).pack(side="left", padx=4)
         ctk.CTkButton(rr, text=t("btn_clear"), fg_color=DANGER, hover_color="#B91C1C", width=90,
-                      command=lambda: self.pf_text.delete("1.0", "end")).pack(side="left", padx=4)
+                      command=lambda: (self.pf_text.delete("1.0", "end"), self._auto_save_profile())).pack(side="left", padx=4)
         self.pf_text = ctk.CTkTextbox(ip, height=230, font=font(13))
         self.pf_text.pack(fill="x")
         self.pf_text.insert("1.0", self.s.get("profile_text", ""))
+        self.pf_text.bind("<KeyRelease>", self._auto_save_profile)
 
         sp = self._card(box, t("card_signature"))
         self.pf_sig = ctk.CTkTextbox(sp, height=80, font=font(13))
         self.pf_sig.pack(fill="x")
         self.pf_sig.insert("1.0", self.s.get("signature", ""))
+        self.pf_sig.bind("<KeyRelease>", self._auto_save_profile)
 
         ctk.CTkButton(p, text=t("btn_save_profile"), height=44, corner_radius=12, fg_color=ACCENT,
                       hover_color=ACCENT_H, font=font(14, True), command=self._save_profile).pack(fill="x", pady=(8, 0))
@@ -601,12 +646,16 @@ class App(ctk.CTk):
             return
         self.pf_text.delete("1.0", "end")
         self.pf_text.insert("1.0", text)
+        self._auto_save_profile()
 
     def _save_profile(self):
+        self._auto_save_profile()
+        messagebox.showinfo(t("ok_title"), t("profile_saved"))
+
+    def _auto_save_profile(self, event=None):
         self.s.set("profile_text", self.pf_text.get("1.0", "end-1c"))
         self.s.set("signature", self.pf_sig.get("1.0", "end-1c"))
         self.s.save()
-        messagebox.showinfo(t("ok_title"), t("profile_saved"))
 
     # ===================== AYARLAR =====================
     def _page_settings(self, p):
@@ -627,10 +676,14 @@ class App(ctk.CTk):
         self.set_service.set(cur_srv)
         self.set_service.pack(fill="x")
         self.set_email = self._field(m, t("email_label"), "email", placeholder=t("email_ph"))
+        self.set_email.bind("<KeyRelease>", self._auto_save_settings)
         self.set_pass = self._field(m, t("pass_label"), "smtp_password", show="●")
+        self.set_pass.bind("<KeyRelease>", self._auto_save_settings)
         self.adv = ctk.CTkFrame(m, fg_color="transparent")
         self.set_server = self._field(self.adv, t("smtp_server_lbl"), "smtp_server")
+        self.set_server.bind("<KeyRelease>", self._auto_save_settings)
         self.set_port = self._field(self.adv, t("smtp_port_lbl"), "smtp_port")
+        self.set_port.bind("<KeyRelease>", self._auto_save_settings)
         if cur_srv == t("smtp_custom"):
             self.adv.pack(fill="x")
         rr = ctk.CTkFrame(m, fg_color="transparent")
@@ -656,6 +709,9 @@ class App(ctk.CTk):
         self.set_model = ctk.CTkComboBox(a, values=MODEL_PRESETS.get(prov, []))
         self.set_model.set(self.s.get("llm_model") or (MODEL_PRESETS.get(prov, [""])[0]))
         self.set_model.pack(fill="x")
+        self.set_model.bind("<KeyRelease>", self._auto_save_settings)
+        self.set_model.configure(command=lambda val: self._auto_save_settings())
+        
         self.btn_fetch = ctk.CTkButton(a, text=t("btn_fetch_models"),
                                        height=30, fg_color="transparent", border_width=1,
                                        border_color=MUTED, text_color=MUTED, hover_color="#222B36",
@@ -665,12 +721,14 @@ class App(ctk.CTk):
             self.btn_fetch.pack_forget()
         self.set_apikey = self._field(a, t("apikey_label"), "llm_api_key", show="●",
                                       placeholder=t("apikey_ph"))
+        self.set_apikey.bind("<KeyRelease>", self._auto_save_settings)
         self.base_wrap = ctk.CTkFrame(a, fg_color="transparent")
         self.set_baseurl = self._field(self.base_wrap, t("baseurl_label"), "llm_base_url",
                                        placeholder="https://...")
+        self.set_baseurl.bind("<KeyRelease>", self._auto_save_settings)
         if prov == "openai":
             self.base_wrap.pack(fill="x")
-        self.set_online = ctk.CTkCheckBox(a, text=t("online_label"))
+        self.set_online = ctk.CTkCheckBox(a, text=t("online_label"), command=self._auto_save_settings)
         if self.s.get("use_grounding", True):
             self.set_online.select()
         self.set_online.pack(anchor="w", pady=10)
@@ -686,6 +744,7 @@ class App(ctk.CTk):
         h = self._card(box, t("card_finder"))
         self.set_hunter = self._field(h, t("hunter_label"),
                                       "hunter_api_key", show="●")
+        self.set_hunter.bind("<KeyRelease>", self._auto_save_settings)
 
         u = self._card(box, t("card_usage"))
         self.ai_count_lbl = ctk.CTkLabel(u, text=t("ai_count", count=self.s.get('ai_requests', 0)),
@@ -706,6 +765,7 @@ class App(ctk.CTk):
             self.adv.pack_forget()
             self.set_server.delete(0, "end"); self.set_server.insert(0, srv)
             self.set_port.delete(0, "end"); self.set_port.insert(0, str(port))
+        self._auto_save_settings()
 
     def _on_provider(self, label):
         prov = get_provider_labels()[label]
@@ -719,6 +779,7 @@ class App(ctk.CTk):
             self.btn_fetch.pack(anchor="w", pady=(6, 0))
         else:
             self.btn_fetch.pack_forget()
+        self._auto_save_settings()
 
     def _fetch_models(self):
         self.llm_msg.configure(text=t("fetching_models"), text_color=MUTED)
@@ -741,8 +802,21 @@ class App(ctk.CTk):
 
     def _save_settings(self):
         try:
+            self._auto_save_settings()
+            messagebox.showinfo(t("ok_title"), t("settings_saved"))
+        except ValueError:
+            messagebox.showerror(t("error_title"), t("port_error"))
+
+    def _auto_save_settings(self, event=None):
+        try:
+            port_val = self.set_port.get() or "587"
+            try:
+                port = int(port_val)
+            except ValueError:
+                port = 587
+                
             self.s.set("smtp_server", self.set_server.get() or "smtp.gmail.com")
-            self.s.set("smtp_port", int(self.set_port.get() or 587))
+            self.s.set("smtp_port", port)
             self.s.set("email", self.set_email.get())
             self.s.set("smtp_password", self.set_pass.get())
             self.s.set("llm_provider", get_provider_labels()[self.set_provider.get()])
@@ -753,9 +827,8 @@ class App(ctk.CTk):
             self.s.set("hunter_api_key", self.set_hunter.get())
             self.s.save()
             self._refresh_status()
-            messagebox.showinfo(t("ok_title"), t("settings_saved"))
-        except ValueError:
-            messagebox.showerror(t("error_title"), t("port_error"))
+        except Exception:
+            pass
 
     def _test_smtp(self):
         self.smtp_msg.configure(text=t("connecting"), text_color=MUTED)
