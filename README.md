@@ -21,23 +21,40 @@
 
 ---
 
-## 🚀 Kurulum
+## 🚀 Başlatma (tek tıkla)
 
 Gereken: **Python 3.9+** ([python.org](https://www.python.org/downloads/)).
 Windows/Mac'te `tkinter` Python ile birlikte gelir. Linux'ta ayrıca gerekir (aşağıda).
 
 ### Windows
-1. `install.bat`'e çift tıkla (ilk seferde 2-3 dk).
-2. Bitince `run.bat`'e çift tıkla.
+`BASLAT.bat`'e çift tıkla — ilk açılışta venv oluşturur ve bağımlılıkları kurar (2-3 dk), sonraki açılışlarda direkt başlar.
 
-### macOS / Linux
+### macOS
+`BASLAT.command`'a çift tıkla (ilk seferinde Terminal açılabilir — normal).
+
+### Linux (terminalde)
 ```bash
-chmod +x install.sh run.sh
-./install.sh
-./run.sh
+chmod +x BASLAT.command   # bir kez
+./BASLAT.command
 ```
 **Linux'ta tkinter:** `sudo apt install python3-tk` (Debian/Ubuntu) ·
 `sudo dnf install python3-tkinter` (Fedora) · `sudo pacman -S tk` (Arch).
+
+---
+
+## 📦 Paylaşım için .exe / .app üretme
+
+Son kullanıcılara Python kurdurmak istemiyorsan kendi bilgisayarında çalıştırılabilir dosya üretebilirsin.
+PyInstaller **çapraz derlemez** — her platform kendi dosyasını kendi makinesinde üretir.
+
+| Platform | Komut | Çıktı |
+|----------|-------|-------|
+| Windows | `build.bat` | `dist\EmailAI.exe` |
+| macOS | `./build.sh` | `dist/EmailAI.app` |
+| Linux | `./build.sh` | `dist/EmailAI` |
+
+Üretilen dosyayı (`.exe` veya `.app`) kullanıcıyla paylaş; karşı tarafta Python kurulu olmak zorunda değil.
+İkon eklemek istersen: `icon.ico` (Win), `icon.icns` (Mac), `icon.png` (Linux) koy ve build scriptini güncelle.
 
 ---
 
@@ -84,15 +101,6 @@ Normal Gmail şifren **çalışmaz**. Adımlar:
 
 ---
 
-## 📦 Çalıştırılabilir (.exe / .app) üretme
-PyInstaller **çapraz derlemez**: her dosyayı kendi işletim sisteminde üret.
-- **Windows:** `build.bat` → `dist\EmailAI.exe`
-- **macOS:** `./build.sh` → `dist/EmailAI.app` (ilk açılış: sağ tık → Aç)
-- **Linux:** `./build.sh` → `dist/EmailAI`
-İkon istersen: `icon.ico` (Win), `icon.icns` (Mac), `icon.png` (Linux) koy.
-
----
-
 ## 🛠 Sorun giderme
 | Sorun | Çözüm |
 |------|-------|
@@ -114,7 +122,8 @@ core/
   llm.py               # Gemini(grounding) + OpenAI-uyumlu
   finder.py            # Hunter + kalıp tahmini
   profile.py           # CV/PDF metin çıkarımı
-install.* / run.* / build.*   # kurulum, çalıştırma, paketleme
+BASLAT.bat / BASLAT.command   # tek tıkla başlatıcı (Win / Mac-Linux)
+build.bat / build.sh          # PyInstaller ile .exe/.app üretme
 requirements.txt
 ```
 
