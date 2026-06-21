@@ -41,6 +41,7 @@ DEFAULTS: Dict[str, Any] = {
     # Genel
     "default_tone": "samimi",          # resmi | samimi | satış | akademik
     "default_lang": "tr",
+    "ui_lang": "tr",                   # arayüz dili (tr / en)
     "send_as_html": False,
     "send_delay_sec": 2.0,             # spam'a takılmamak için
     "ai_requests": 0,                  # toplam AI istek sayacı

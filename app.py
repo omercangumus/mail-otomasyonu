@@ -23,7 +23,13 @@ except ImportError as e:
 
 from core.settings import Settings
 from core import email_service as es, finder, profile as profile_mod
-from core.llm import LLMClient, TONES, MODEL_PRESETS, PROVIDERS, fetch_openrouter_models
+from core.llm import LLMClient, MODEL_PRESETS, fetch_openrouter_models
+from core.i18n import (
+    t, set_ui_lang, get_ui_lang, get_purposes, get_tone_labels,
+    tone_key_from_label, get_length_labels, length_value_from_label,
+    get_smtp_presets, get_provider_labels, get_label_by_provider,
+    UI_LANG_LABELS, UI_LANG_BY_CODE
+)
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -35,23 +41,6 @@ WARN = "#F59E0B"
 DANGER = "#EF4444"
 MUTED = "#94A3B8"
 CARD = "#1F2630"
-
-PROVIDER_LABELS = {"Google Gemini": "gemini", "OpenRouter": "openrouter", "OpenAI / Özel": "openai"}
-LABEL_BY_PROVIDER = {v: k for k, v in PROVIDER_LABELS.items()}
-SMTP_PRESETS = {"Gmail": ("smtp.gmail.com", 587), "Outlook": ("smtp.office365.com", 587),
-                "Yandex": ("smtp.yandex.com", 465), "Özel": ("", 0)}
-
-# Mail amacı şablonları — "hep tez yazıyor" sorununu çözer
-PURPOSES = {
-    "Serbest (aşağıya kendim yazacağım)": "",
-    "İş / staj başvurusu": "Bu kişiye/şirkete iş veya staj başvurusu maili. Profilimdeki deneyim ve becerilerden somut örneklerle neden uygun olduğumu anlat.",
-    "İşbirliği / ortaklık teklifi": "Bu kişiye/şirkete işbirliği veya ortaklık teklifi maili.",
-    "Etkinlik / toplantı daveti": "Bu kişiyi bir etkinliğe veya toplantıya davet maili.",
-    "Soğuk satış / tanıtım": "Bu kişiye ürün/hizmet tanıtımı ve kısa, fayda odaklı bir soğuk satış maili.",
-    "Takip / nazik hatırlatma": "Önceki bir konunun nazik takibi / hatırlatması maili.",
-    "Teşekkür": "Bu kişiye içten bir teşekkür maili.",
-    "Tez / akademik davet": "Hocama/akademisyene yüksek lisans tez savunmama davet maili.",
-}
 
 
 def _seconds_until(hhmm: str) -> float:
@@ -81,6 +70,7 @@ class App(ctk.CTk):
         self.geometry("1000x700")
         self.minsize(900, 600)
         self.s = Settings()
+        set_ui_lang(self.s.get("ui_lang", "tr"))
         self.draft_cards = []
         self._att = self.s.get("attachment_path", "")
         self.grid_columnconfigure(1, weight=1)
@@ -96,33 +86,33 @@ class App(ctk.CTk):
         sb.grid_propagate(False)
 
         ctk.CTkLabel(sb, text="✉  EmailAI", font=font(22, True)).pack(pady=(26, 6))
-        ctk.CTkLabel(sb, text="akıllı mail asistanı", text_color=MUTED,
+        ctk.CTkLabel(sb, text=t("app_subtitle"), text_color=MUTED,
                      font=font(11)).pack(pady=(0, 24))
 
         self.nav = {}
-        for key, label, icon in [("compose", "Oluştur", "✨"), ("bulk", "Toplu Gönder", "📨"),
-                                 ("profile", "Profil", "👤"), ("settings", "Ayarlar", "⚙️")]:
+        for key, label, icon in [("compose", t("nav_compose"), "✨"), ("bulk", t("nav_bulk"), "📨"),
+                                 ("profile", t("nav_profile"), "👤"), ("settings", t("nav_settings"), "⚙️")]:
             b = ctk.CTkButton(sb, text=f"  {icon}   {label}", anchor="w", height=44,
-                              corner_radius=10, fg_color="transparent", text_color="#E6EDF3",
-                              hover_color="#222B36", font=font(14),
-                              command=lambda k=key: self.show(k))
+                               corner_radius=10, fg_color="transparent", text_color="#E6EDF3",
+                               hover_color="#222B36", font=font(14),
+                               command=lambda k=key: self.show(k))
             b.pack(fill="x", padx=14, pady=3)
             self.nav[key] = b
 
         # durum göstergeleri (alt)
         status = ctk.CTkFrame(sb, fg_color="transparent")
         status.pack(side="bottom", fill="x", padx=16, pady=18)
-        self.dot_smtp = ctk.CTkLabel(status, text="● Mail: —", font=font(12), text_color=MUTED)
+        self.dot_smtp = ctk.CTkLabel(status, text=t("status_mail") + "—", font=font(12), text_color=MUTED)
         self.dot_smtp.pack(anchor="w", pady=2)
-        self.dot_ai = ctk.CTkLabel(status, text="● Yapay zeka: —", font=font(12), text_color=MUTED)
+        self.dot_ai = ctk.CTkLabel(status, text=t("status_ai") + "—", font=font(12), text_color=MUTED)
         self.dot_ai.pack(anchor="w", pady=2)
 
     def _refresh_status(self):
         smtp_ok = bool(self.s.get("email") and self.s.get("smtp_password"))
         ai_ok = bool(self.s.get("llm_api_key"))
-        self.dot_smtp.configure(text="● Mail: " + ("hazır" if smtp_ok else "eksik"),
+        self.dot_smtp.configure(text=t("status_mail") + (t("status_ready") if smtp_ok else t("status_missing")),
                                 text_color=OK if smtp_ok else MUTED)
-        self.dot_ai.configure(text="● Yapay zeka: " + ("hazır" if ai_ok else "eksik"),
+        self.dot_ai.configure(text=t("status_ai") + (t("status_ready") if ai_ok else t("status_missing")),
                               text_color=OK if ai_ok else MUTED)
 
     # ===================== CONTENT =====================
@@ -170,52 +160,73 @@ class App(ctk.CTk):
 
     # ===================== OLUŞTUR =====================
     def _page_compose(self, p):
-        self._header(p, "✨ AI ile Mail Oluştur", "Kime + ne yazılacağını söyle, gerisini AI halletsin.")
+        self._header(p, t("compose_title"), t("compose_sub"))
         box = ctk.CTkScrollableFrame(p, fg_color="transparent")
         box.pack(fill="both", expand=True)
 
-        ip = self._card(box, "1 · Amaç & detay")
-        ctk.CTkLabel(ip, text="Mail ne hakkında?", font=font(12), text_color=MUTED).pack(anchor="w", pady=(0, 2))
-        self.o_purpose = ctk.CTkOptionMenu(ip, values=list(PURPOSES.keys()), command=self._on_purpose)
-        self.o_purpose.set(list(PURPOSES.keys())[0])
+        ip = self._card(box, t("card_purpose"))
+        ctk.CTkLabel(ip, text=t("purpose_label"), font=font(12), text_color=MUTED).pack(anchor="w", pady=(0, 2))
+        purposes_dict = get_purposes()
+        self.o_purpose = ctk.CTkOptionMenu(ip, values=list(purposes_dict.keys()), command=self._on_purpose)
+        self.o_purpose.set(list(purposes_dict.keys())[0])
         self.o_purpose.pack(fill="x")
-        ctk.CTkLabel(ip, text="Detay (serbest yaz: bağlam, ne istediğin, özel notlar)",
+        ctk.CTkLabel(ip, text=t("detail_label"),
                      font=font(12), text_color=MUTED).pack(anchor="w", pady=(8, 2))
         self.t_brief = ctk.CTkTextbox(ip, height=70, font=font(13))
         self.t_brief.pack(fill="x")
 
-        tp = self._card(box, "2 · Kime?  (her satıra biri: Ad Soyad, şirket/site ya da LinkedIn linki)")
+        tp = self._card(box, t("card_target"))
         self.t_targets = ctk.CTkTextbox(tp, height=90, font=font(13))
         self.t_targets.pack(fill="x")
-        self.t_targets.insert("1.0", "Ahmet Yılmaz, beko.com\nhttps://www.linkedin.com/in/ornek\nali@firma.com")
+        self.t_targets.insert("1.0", t("target_ph"))
 
-        op = self._card(box, "3 · Üslup & zamanlama")
+        op = self._card(box, t("card_tone"))
         row = ctk.CTkFrame(op, fg_color="transparent")
         row.pack(fill="x")
-        self.o_tone = ctk.CTkOptionMenu(row, values=list(TONES.keys()), width=120)
-        self.o_tone.set(self.s.get("default_tone", "samimi"))
+        
+        tone_labels = get_tone_labels()
+        self.o_tone = ctk.CTkOptionMenu(row, values=list(tone_labels.values()), width=110)
+        def_tone_key = self.s.get("default_tone", "samimi")
+        self.o_tone.set(tone_labels.get(def_tone_key, tone_labels.get("samimi", "Samimi")))
         self.o_tone.pack(side="left", padx=(0, 8))
+        
         self.o_lang = ctk.CTkOptionMenu(row, values=["tr", "en"], width=70)
         self.o_lang.set(self.s.get("default_lang", "tr"))
         self.o_lang.pack(side="left", padx=8)
-        self.c_html = ctk.CTkCheckBox(row, text="HTML")
+        
+        # Length selection dropdown
+        ctk.CTkLabel(row, text=t("length_label"), font=font(12), text_color=MUTED).pack(side="left", padx=(10, 4))
+        length_labels = get_length_labels()
+        self.o_length = ctk.CTkOptionMenu(row, values=length_labels, width=130)
+        med_label = ""
+        for lbl in length_labels:
+            if length_value_from_label(lbl) == "medium":
+                med_label = lbl
+                break
+        if not med_label:
+            med_label = length_labels[1] if len(length_labels) > 1 else length_labels[0]
+        self.o_length.set(med_label)
+        self.o_length.pack(side="left", padx=8)
+        
+        self.c_html = ctk.CTkCheckBox(row, text=t("html_label"))
         self.c_html.pack(side="left", padx=10)
-        ctk.CTkLabel(row, text="Saat:", font=font(12), text_color=MUTED).pack(side="left", padx=(14, 4))
+        
+        ctk.CTkLabel(row, text=t("time_label"), font=font(12), text_color=MUTED).pack(side="left", padx=(14, 4))
         self.sch_compose = ctk.CTkEntry(row, width=80, placeholder_text="HH:MM")
         self.sch_compose.pack(side="left")
-        ctk.CTkLabel(row, text="(boş=hemen)", font=font(11), text_color=MUTED).pack(side="left", padx=6)
+        ctk.CTkLabel(row, text=t("time_empty"), font=font(11), text_color=MUTED).pack(side="left", padx=6)
 
-        self.b_gen = ctk.CTkButton(box, text="✨  Araştır & Taslak Üret", height=46, corner_radius=12,
+        self.b_gen = ctk.CTkButton(box, text=t("btn_generate"), height=46, corner_radius=12,
                                    fg_color=ACCENT, hover_color=ACCENT_H, font=font(15, True),
                                    command=self._generate)
         self.b_gen.pack(fill="x", pady=10)
         self.ai_status = ctk.CTkLabel(box, text="", text_color=MUTED, font=font(12))
         self.ai_status.pack(anchor="w")
 
-        self.results = ctk.CTkScrollableFrame(box, label_text="Taslaklar", height=260)
+        self.results = ctk.CTkScrollableFrame(box, label_text=t("drafts_label"), height=260)
         self.results.pack(fill="both", expand=True, pady=6)
 
-        self.b_send_sel = ctk.CTkButton(p, text="🚀  Onaylananları Gönder", height=46, corner_radius=12,
+        self.b_send_sel = ctk.CTkButton(p, text=t("btn_send_sel"), height=46, corner_radius=12,
                                         fg_color=OK, hover_color="#16A34A", font=font(15, True),
                                         state="disabled", command=self._send_selected)
         self.b_send_sel.pack(fill="x", pady=(8, 0))
@@ -225,11 +236,11 @@ class App(ctk.CTk):
         if not key:
             return None
         return LLMClient(self.s.get("llm_provider", "gemini"), key,
-                         self.s.get("llm_model", ""), self.s.get("llm_base_url", ""),
-                         bool(self.s.get("use_grounding", True)))
+                          self.s.get("llm_model", ""), self.s.get("llm_base_url", ""),
+                          bool(self.s.get("use_grounding", True)))
 
     def _on_purpose(self, label):
-        tmpl = PURPOSES.get(label, "")
+        tmpl = get_purposes().get(label, "")
         self.t_brief.delete("1.0", "end")
         if tmpl:
             self.t_brief.insert("1.0", tmpl)
@@ -239,40 +250,40 @@ class App(ctk.CTk):
         self.s.save()
         if hasattr(self, "ai_count_lbl"):
             try:
-                self.ai_count_lbl.configure(text=f"Toplam AI isteği: {self.s.get('ai_requests', 0)}")
+                self.ai_count_lbl.configure(text=t("ai_count", count=self.s.get('ai_requests', 0)))
             except Exception:
                 pass
 
     def _generate(self):
         client = self._llm()
         if not client:
-            messagebox.showwarning("Yapay zeka yok",
-                                   "AI üretimi için Ayarlar'da bir API anahtarı gir.\n"
-                                   "(Anahtarsız 'Toplu Gönder'i kullanabilirsin.)")
+            messagebox.showwarning(t("no_ai_title"), t("no_ai_msg"))
             self.show("settings")
             return
-        targets = [t.strip() for t in self.t_targets.get("1.0", "end-1c").splitlines() if t.strip()]
+        targets = [t_line.strip() for t_line in self.t_targets.get("1.0", "end-1c").splitlines() if t_line.strip()]
         if not targets:
-            messagebox.showwarning("Hedef yok", "En az bir kişi gir.")
+            messagebox.showwarning(t("no_target_title"), t("no_target_msg"))
             return
         brief = self.t_brief.get("1.0", "end-1c")
         prof = self.s.get("profile_text", "")
         sig = self.s.get("signature", "")
-        tone, lang = self.o_tone.get(), self.o_lang.get()
+        tone_val = tone_key_from_label(self.o_tone.get())
+        lang = self.o_lang.get()
+        length_val = length_value_from_label(self.o_length.get())
         hunter = self.s.get("hunter_api_key")
 
         for c in self.draft_cards:
             c["frame"].destroy()
         self.draft_cards.clear()
-        self.b_gen.configure(state="disabled", text="Üretiliyor…")
+        self.b_gen.configure(state="disabled", text=t("generating"))
         self.b_send_sel.configure(state="disabled")
 
         def run():
             for i, tgt in enumerate(targets):
                 self.after(0, lambda i=i, n=len(targets): self.ai_status.configure(
-                    text=f"🔎 Araştırılıyor…  {i+1}/{n}"))
+                    text=t("researching", i=i+1, n=n)))
                 try:
-                    res = client.research_and_draft(tgt, brief, prof, tone, lang, sig)
+                    res = client.research_and_draft(tgt, brief, prof, tone_val, lang, sig, length=length_val)
                 except Exception as e:
                     res = {"email": "", "email_confidence": "unknown", "subject": "(hata)",
                            "body": f"Üretim hatası: {e}", "sources": [], "research_notes": ""}
@@ -286,8 +297,8 @@ class App(ctk.CTk):
                         llm_found=res.get("email") if res.get("email") else None)
                 self.after(0, self._add_card, tgt, res, chosen)
                 self.after(0, self._bump_ai, 1)
-            self.after(0, lambda: (self.ai_status.configure(text="✓ Hazır. Düzenle, onayla, gönder."),
-                                   self.b_gen.configure(state="normal", text="✨  Araştır & Taslak Üret"),
+            self.after(0, lambda: (self.ai_status.configure(text=t("gen_done")),
+                                   self.b_gen.configure(state="normal", text=t("btn_generate")),
                                    self.b_send_sel.configure(state="normal")))
         threading.Thread(target=run, daemon=True).start()
 
@@ -295,8 +306,8 @@ class App(ctk.CTk):
         card = ctk.CTkFrame(self.results, fg_color=CARD, corner_radius=10)
         card.pack(fill="x", pady=6, padx=4)
         conf = chosen.get("confidence", "unknown")
-        badge = {"verified": ("✓ doğrulandı", OK), "guessed": ("≈ tahmin (kontrol et)", WARN),
-                 "unknown": ("✗ mail yok", DANGER)}.get(conf, ("?", MUTED))
+        badge = {"verified": (t("badge_verified"), OK), "guessed": (t("badge_guessed"), WARN),
+                 "unknown": (t("badge_unknown"), DANGER)}.get(conf, ("?", MUTED))
 
         head = ctk.CTkFrame(card, fg_color="transparent")
         head.pack(fill="x", padx=12, pady=(10, 2))
@@ -320,7 +331,7 @@ class App(ctk.CTk):
                          wraplength=720, justify="left", font=font(11)).pack(anchor="w", padx=12)
         if res.get("sources"):
             src = " · ".join(s["url"] for s in res["sources"][:3])
-            ctk.CTkLabel(card, text="Kaynak: " + src, text_color="#5B7", wraplength=720,
+            ctk.CTkLabel(card, text=t("source_prefix") + src, text_color="#5B7", wraplength=720,
                          justify="left", font=font(11)).pack(anchor="w", padx=12, pady=(0, 10))
         else:
             ctk.CTkLabel(card, text="", height=4).pack()
@@ -329,19 +340,24 @@ class App(ctk.CTk):
     def _send_selected(self):
         valid = [c for c in self.draft_cards if c["chk"].get() and es.valid_email(c["mail"].get())]
         if not valid:
-            messagebox.showwarning("Gönder", "Onaylı + geçerli mailli taslak yok.")
+            messagebox.showwarning(t("send_title"), t("no_valid_draft"))
             return
         cfg = self._smtp_cfg()
         if not cfg:
             return
         wait = _seconds_until(self.sch_compose.get())
-        when = "hemen" if wait <= 0 else f"saat {self.sch_compose.get().strip()}'de"
-        if not messagebox.askyesno("Onay", f"{len(valid)} mail {when} gönderilecek." +
-                                   ("\n(Zamanlı: uygulama açık kalmalı.)" if wait > 0 else "") + "\nDevam?"):
+        when = t("when_now") if wait <= 0 else f"{t('time_label')} {self.sch_compose.get().strip()}"
+        
+        msg_text = f"{len(valid)} mail {when} gönderilecek." if get_ui_lang() == "tr" else f"{len(valid)} email(s) will be sent {when}."
+        if wait > 0:
+            msg_text += t("scheduled_note")
+        msg_text += t("continue_q")
+        
+        if not messagebox.askyesno(t("confirm_title"), msg_text):
             return
         html = bool(self.c_html.get())
         delay = float(self.s.get("send_delay_sec", 2.0))
-        self.b_send_sel.configure(state="disabled", text="Sırada…" if wait > 0 else "Gönderiliyor…")
+        self.b_send_sel.configure(state="disabled", text=t("queued") if wait > 0 else t("sending"))
 
         def run():
             if wait > 0:
@@ -355,51 +371,52 @@ class App(ctk.CTk):
                                      c["body"].get("1.0", "end-1c"), html=html)
                 ok, err = (ok + 1, err) if s else (ok, err + 1)
                 time.sleep(delay)
-            self.after(0, lambda: (self.b_send_sel.configure(state="normal", text="🚀  Onaylananları Gönder"),
+            success_prompt = f"Başarılı: {ok}\nHatalı: {err}" if get_ui_lang() == "tr" else f"Success: {ok}\nFailed: {err}"
+            self.after(0, lambda: (self.b_send_sel.configure(state="normal", text=t("btn_send_sel")),
                                    self.ai_status.configure(text="", text_color=MUTED),
-                                   messagebox.showinfo("Bitti", f"Başarılı: {ok}\nHatalı: {err}")))
+                                   messagebox.showinfo(t("done_title"), success_prompt)))
         threading.Thread(target=run, daemon=True).start()
 
     # ===================== TOPLU =====================
     def _page_bulk(self, p):
-        self._header(p, "📨 Toplu Gönderim", "Aynı maili çok kişiye. Yapay zeka gerekmez.")
+        self._header(p, t("bulk_title"), t("bulk_sub"))
         box = ctk.CTkScrollableFrame(p, fg_color="transparent")
         box.pack(fill="both", expand=True)
-        ip = self._card(box, "Mail içeriği")
-        self.bk_subj = ctk.CTkEntry(ip, placeholder_text="Konu", height=36)
+        ip = self._card(box, t("card_content"))
+        self.bk_subj = ctk.CTkEntry(ip, placeholder_text=t("subject_ph"), height=36)
         self.bk_subj.pack(fill="x", pady=(0, 6))
         self.bk_subj.insert(0, self.s.get("bulk_subject", ""))
-        ctk.CTkLabel(ip, text="Mesaj  ({ad} ile kişiselleştir)", text_color=MUTED, font=font(12)).pack(anchor="w")
+        ctk.CTkLabel(ip, text=t("bulk_msg_label"), text_color=MUTED, font=font(12)).pack(anchor="w")
         self.bk_msg = ctk.CTkTextbox(ip, height=140, font=font(13))
         self.bk_msg.pack(fill="x", pady=4)
         self.bk_msg.insert("1.0", self.s.get("bulk_message", ""))
-        self.bk_html = ctk.CTkCheckBox(ip, text="HTML olarak gönder")
+        self.bk_html = ctk.CTkCheckBox(ip, text=t("html_send"))
         self.bk_html.pack(anchor="w", pady=6)
 
-        rp = self._card(box, "Alıcılar  (her satır:  mail   ya da   mail, Ad)")
+        rp = self._card(box, t("card_recipients"))
         self.bk_to = ctk.CTkTextbox(rp, height=130, font=font(13))
         self.bk_to.pack(fill="x")
         self.bk_to.insert("1.0", "\n".join(self.s.get("bulk_recipients", [])))
         rr = ctk.CTkFrame(rp, fg_color="transparent")
         rr.pack(fill="x", pady=8)
-        ctk.CTkButton(rr, text="📥 Dosyadan Yükle", width=140, command=self._import_bulk).pack(side="left", padx=4)
-        self.bk_att = ctk.CTkLabel(rr, text="Ek: yok", text_color=MUTED, font=font(12))
+        ctk.CTkButton(rr, text=t("btn_import"), width=140, command=self._import_bulk).pack(side="left", padx=4)
+        self.bk_att = ctk.CTkLabel(rr, text=t("att_none"), text_color=MUTED, font=font(12))
         self.bk_att.pack(side="left", padx=12)
-        ctk.CTkButton(rr, text="Ek Seç", width=80, command=self._pick_att).pack(side="left", padx=4)
-        ctk.CTkButton(rr, text="Kaldır", width=80, fg_color=DANGER, hover_color="#B91C1C",
+        ctk.CTkButton(rr, text=t("btn_pick_att"), width=80, command=self._pick_att).pack(side="left", padx=4)
+        ctk.CTkButton(rr, text=t("btn_remove"), width=80, fg_color=DANGER, hover_color="#B91C1C",
                       command=self._clear_att).pack(side="left", padx=4)
         if self._att:
-            self.bk_att.configure(text="Ek: " + os.path.basename(self._att))
+            self.bk_att.configure(text=t("att_prefix") + os.path.basename(self._att))
 
         sch = ctk.CTkFrame(p, fg_color="transparent")
         sch.pack(fill="x", pady=(8, 0))
-        ctk.CTkLabel(sch, text="⏰ Gönderim saati (HH:MM, boş=hemen):", font=font(12),
+        ctk.CTkLabel(sch, text=t("schedule_label"), font=font(12),
                      text_color=MUTED).pack(side="left", padx=(2, 6))
         self.sch_bulk = ctk.CTkEntry(sch, width=90, placeholder_text="HH:MM")
         self.sch_bulk.pack(side="left")
-        ctk.CTkLabel(sch, text="zamanlıysa uygulama açık kalmalı", font=font(11),
+        ctk.CTkLabel(sch, text=t("schedule_note"), font=font(11),
                      text_color=MUTED).pack(side="left", padx=8)
-        ctk.CTkButton(p, text="🚀  Toplu Gönder", height=46, corner_radius=12, fg_color=OK,
+        ctk.CTkButton(p, text=t("btn_bulk_send"), height=46, corner_radius=12, fg_color=OK,
                       hover_color="#16A34A", font=font(15, True), command=self._send_bulk).pack(fill="x", pady=(8, 0))
 
     def _pick_att(self):
@@ -408,16 +425,16 @@ class App(ctk.CTk):
             self._att = p
             self.s.set("attachment_path", p)
             self.s.save()
-            self.bk_att.configure(text="Ek: " + os.path.basename(p))
+            self.bk_att.configure(text=t("att_prefix") + os.path.basename(p))
 
     def _clear_att(self):
         self._att = ""
         self.s.set("attachment_path", "")
         self.s.save()
-        self.bk_att.configure(text="Ek: yok")
+        self.bk_att.configure(text=t("att_none"))
 
     def _import_bulk(self):
-        p = filedialog.askopenfilename(filetypes=[("Metin/CSV", "*.txt *.csv"), ("Tümü", "*.*")])
+        p = filedialog.askopenfilename(filetypes=[(t("filetype_text"), "*.txt *.csv"), (t("filetype_all"), "*.*")])
         if not p:
             return
         try:
@@ -426,7 +443,7 @@ class App(ctk.CTk):
             self.bk_to.delete("1.0", "end")
             self.bk_to.insert("1.0", "\n".join(lines))
         except Exception as e:
-            messagebox.showerror("Hata", str(e))
+            messagebox.showerror(t("error_title"), str(e))
 
     def _send_bulk(self):
         cfg = self._smtp_cfg()
@@ -434,13 +451,15 @@ class App(ctk.CTk):
             return
         rows = [r.strip() for r in self.bk_to.get("1.0", "end-1c").splitlines() if "@" in r]
         if not rows:
-            messagebox.showwarning("Alıcı yok", "Alıcı listesi boş.")
+            messagebox.showwarning(t("no_recip_title"), t("no_recip_msg"))
             return
         subj, body = self.bk_subj.get(), self.bk_msg.get("1.0", "end-1c")
         html = bool(self.bk_html.get())
         self.s.set("bulk_subject", subj); self.s.set("bulk_message", body)
         self.s.set("bulk_recipients", rows); self.s.save()
-        if not messagebox.askyesno("Onay", f"{len(rows)} kişiye gönderilecek. Devam?"):
+        
+        confirm_prompt = f"{len(rows)} kişiye gönderilecek. Devam?" if get_ui_lang() == "tr" else f"Will be sent to {len(rows)} recipients. Continue?"
+        if not messagebox.askyesno(t("confirm_title"), confirm_prompt):
             return
         delay = float(self.s.get("send_delay_sec", 2.0))
         wait = _seconds_until(self.sch_bulk.get())
@@ -457,42 +476,43 @@ class App(ctk.CTk):
                                      html=html, attachment_path=self._att or None)
                 ok, err = (ok + 1, err) if s else (ok, err + 1)
                 time.sleep(delay)
-            self.after(0, lambda: messagebox.showinfo("Bitti", f"Başarılı: {ok}\nHatalı: {err}"))
+            success_prompt = f"Başarılı: {ok}\nHatalı: {err}" if get_ui_lang() == "tr" else f"Success: {ok}\nFailed: {err}"
+            self.after(0, lambda: messagebox.showinfo(t("done_title"), success_prompt))
         threading.Thread(target=run, daemon=True).start()
 
     # ===================== PROFİL =====================
     def _page_profile(self, p):
-        self._header(p, "👤 Profilim", "AI mailleri SENİN ağzından yazsın diye. CV yükle ya da yaz.")
+        self._header(p, t("profile_title"), t("profile_sub"))
         box = ctk.CTkScrollableFrame(p, fg_color="transparent")
         box.pack(fill="both", expand=True)
-        ip = self._card(box, "Hakkımda / CV")
+        ip = self._card(box, t("card_about"))
         rr = ctk.CTkFrame(ip, fg_color="transparent")
         rr.pack(fill="x", pady=(0, 6))
-        ctk.CTkButton(rr, text="📄 CV Yükle (PDF/TXT)", command=self._load_cv).pack(side="left", padx=4)
-        ctk.CTkButton(rr, text="Temizle", fg_color=DANGER, hover_color="#B91C1C", width=90,
+        ctk.CTkButton(rr, text=t("btn_upload_cv"), command=self._load_cv).pack(side="left", padx=4)
+        ctk.CTkButton(rr, text=t("btn_clear"), fg_color=DANGER, hover_color="#B91C1C", width=90,
                       command=lambda: self.pf_text.delete("1.0", "end")).pack(side="left", padx=4)
         self.pf_text = ctk.CTkTextbox(ip, height=230, font=font(13))
         self.pf_text.pack(fill="x")
         self.pf_text.insert("1.0", self.s.get("profile_text", ""))
 
-        sp = self._card(box, "İmza")
+        sp = self._card(box, t("card_signature"))
         self.pf_sig = ctk.CTkTextbox(sp, height=80, font=font(13))
         self.pf_sig.pack(fill="x")
         self.pf_sig.insert("1.0", self.s.get("signature", ""))
 
-        ctk.CTkButton(p, text="💾  Profili Kaydet", height=44, corner_radius=12, fg_color=ACCENT,
+        ctk.CTkButton(p, text=t("btn_save_profile"), height=44, corner_radius=12, fg_color=ACCENT,
                       hover_color=ACCENT_H, font=font(14, True), command=self._save_profile).pack(fill="x", pady=(8, 0))
 
     def _load_cv(self):
-        path = filedialog.askopenfilename(filetypes=[("CV", "*.pdf *.txt *.md"), ("Tümü", "*.*")])
+        path = filedialog.askopenfilename(filetypes=[(t("cv_title"), "*.pdf *.txt *.md"), (t("filetype_all"), "*.*")])
         if not path:
             return
         text = profile_mod.extract_text(path)
         if text == "__NO_PYPDF__":
-            messagebox.showwarning("PDF", "PDF için 'pypdf' gerekli. TXT yükle ya da metni yapıştır.")
+            messagebox.showwarning(t("pdf_title"), t("pdf_msg"))
             return
         if not text.strip():
-            messagebox.showwarning("CV", "Metin çıkarılamadı. TXT dene veya elle yapıştır.")
+            messagebox.showwarning(t("cv_title"), t("cv_msg"))
             return
         self.pf_text.delete("1.0", "end")
         self.pf_text.insert("1.0", text)
@@ -501,95 +521,112 @@ class App(ctk.CTk):
         self.s.set("profile_text", self.pf_text.get("1.0", "end-1c"))
         self.s.set("signature", self.pf_sig.get("1.0", "end-1c"))
         self.s.save()
-        messagebox.showinfo("Tamam", "Profil kaydedildi.")
+        messagebox.showinfo(t("ok_title"), t("profile_saved"))
 
     # ===================== AYARLAR =====================
     def _page_settings(self, p):
-        self._header(p, "⚙️ Ayarlar", "Bir kere doldur, keyring'de güvenle saklanır.")
+        self._header(p, t("settings_title"), t("settings_sub"))
         box = ctk.CTkScrollableFrame(p, fg_color="transparent")
         box.pack(fill="both", expand=True)
 
+        # --- Arayüz Dili ---
+        lang_card = self._card(box, t("card_lang"))
+        ctk.CTkLabel(lang_card, text=t("lang_label"), font=font(12), text_color=MUTED).pack(anchor="w", pady=(4, 2))
+        lang_list = list(UI_LANG_LABELS.keys())
+        self.set_ui_lang_opt = ctk.CTkOptionMenu(lang_card, values=lang_list)
+        saved_ui_lang = self.s.get("ui_lang", "tr")
+        display_name = UI_LANG_BY_CODE.get(saved_ui_lang, "Türkçe")
+        self.set_ui_lang_opt.set(display_name)
+        self.set_ui_lang_opt.pack(fill="x")
+        ctk.CTkLabel(lang_card, text=t("lang_restart"), font=font(11), text_color=MUTED, wraplength=620, justify="left").pack(anchor="w", pady=(6, 2))
+
         # --- Mail hesabı ---
-        m = self._card(box, "📧 Mail Hesabı")
-        ctk.CTkLabel(m, text="Servis", font=font(12), text_color=MUTED).pack(anchor="w", pady=(4, 2))
+        m = self._card(box, t("card_mail"))
+        ctk.CTkLabel(m, text=t("service_label"), font=font(12), text_color=MUTED).pack(anchor="w", pady=(4, 2))
         cur_srv = "Gmail"
-        for n, (srv, _) in SMTP_PRESETS.items():
+        smtp_presets = get_smtp_presets()
+        for n, (srv, _) in smtp_presets.items():
             if srv == self.s.get("smtp_server"):
                 cur_srv = n
-        self.set_service = ctk.CTkOptionMenu(m, values=list(SMTP_PRESETS.keys()),
+        self.set_service = ctk.CTkOptionMenu(m, values=list(smtp_presets.keys()),
                                              command=self._on_service)
         self.set_service.set(cur_srv)
         self.set_service.pack(fill="x")
-        self.set_email = self._field(m, "E-posta", "email", placeholder="seninmailin@gmail.com")
-        self.set_pass = self._field(m, "Şifre (Gmail: Uygulama Şifresi)", "smtp_password", show="●")
+        self.set_email = self._field(m, t("email_label"), "email", placeholder=t("email_ph"))
+        self.set_pass = self._field(m, t("pass_label"), "smtp_password", show="●")
         self.adv = ctk.CTkFrame(m, fg_color="transparent")
-        self.set_server = self._field(self.adv, "SMTP Sunucu", "smtp_server")
-        self.set_port = self._field(self.adv, "Port", "smtp_port")
-        if cur_srv == "Özel":
+        self.set_server = self._field(self.adv, t("smtp_server_lbl"), "smtp_server")
+        self.set_port = self._field(self.adv, t("smtp_port_lbl"), "smtp_port")
+        if cur_srv == t("smtp_custom"):
             self.adv.pack(fill="x")
         rr = ctk.CTkFrame(m, fg_color="transparent")
         rr.pack(fill="x", pady=8)
-        ctk.CTkButton(rr, text="🔌 Bağlantıyı Test Et", command=self._test_smtp).pack(side="left")
+        ctk.CTkButton(rr, text=t("btn_test_smtp"), command=self._test_smtp).pack(side="left")
         self.smtp_msg = ctk.CTkLabel(rr, text="", font=font(12), text_color=MUTED)
         self.smtp_msg.pack(side="left", padx=10)
 
         # --- Yapay zeka ---
-        a = self._card(box, "🤖 Yapay Zeka")
+        a = self._card(box, t("card_ai"))
         prov = self.s.get("llm_provider", "gemini")
-        ctk.CTkLabel(a, text="Sağlayıcı", font=font(12), text_color=MUTED).pack(anchor="w", pady=(4, 2))
-        self.set_provider = ctk.CTkOptionMenu(a, values=list(PROVIDER_LABELS.keys()),
-                                              command=self._on_provider)
-        self.set_provider.set(LABEL_BY_PROVIDER.get(prov, "Google Gemini"))
+        ctk.CTkLabel(a, text=t("provider_label"), font=font(12), text_color=MUTED).pack(anchor="w", pady=(4, 2))
+        
+        provider_labels = get_provider_labels()
+        label_by_provider = get_label_by_provider()
+        
+        self.set_provider = ctk.CTkOptionMenu(a, values=list(provider_labels.keys()),
+                                               command=self._on_provider)
+        self.set_provider.set(label_by_provider.get(prov, "Google Gemini"))
         self.set_provider.pack(fill="x")
-        ctk.CTkLabel(a, text="Model (listeden seç ya da elle yaz)", font=font(12),
+        ctk.CTkLabel(a, text=t("model_label"), font=font(12),
                      text_color=MUTED).pack(anchor="w", pady=(8, 2))
         self.set_model = ctk.CTkComboBox(a, values=MODEL_PRESETS.get(prov, []))
         self.set_model.set(self.s.get("llm_model") or (MODEL_PRESETS.get(prov, [""])[0]))
         self.set_model.pack(fill="x")
-        self.btn_fetch = ctk.CTkButton(a, text="🔄 OpenRouter'dan tüm modelleri çek",
+        self.btn_fetch = ctk.CTkButton(a, text=t("btn_fetch_models"),
                                        height=30, fg_color="transparent", border_width=1,
                                        border_color=MUTED, text_color=MUTED, hover_color="#222B36",
                                        font=font(12), command=self._fetch_models)
         self.btn_fetch.pack(anchor="w", pady=(6, 0))
         if prov != "openrouter":
             self.btn_fetch.pack_forget()
-        self.set_apikey = self._field(a, "API Anahtarı", "llm_api_key", show="●",
-                                      placeholder="kendi anahtarın")
+        self.set_apikey = self._field(a, t("apikey_label"), "llm_api_key", show="●",
+                                      placeholder=t("apikey_ph"))
         self.base_wrap = ctk.CTkFrame(a, fg_color="transparent")
-        self.set_baseurl = self._field(self.base_wrap, "Base URL (sadece OpenAI/Özel)", "llm_base_url",
+        self.set_baseurl = self._field(self.base_wrap, t("baseurl_label"), "llm_base_url",
                                        placeholder="https://...")
         if prov == "openai":
             self.base_wrap.pack(fill="x")
-        self.set_online = ctk.CTkCheckBox(a, text="İnternet araması (Gemini grounding / OpenRouter :online)")
+        self.set_online = ctk.CTkCheckBox(a, text=t("online_label"))
         if self.s.get("use_grounding", True):
             self.set_online.select()
         self.set_online.pack(anchor="w", pady=10)
-        ctk.CTkLabel(a, text="Anahtar: Gemini → aistudio.google.com/apikey · OpenRouter → openrouter.ai/keys",
+        ctk.CTkLabel(a, text=t("key_hint"),
                      font=font(11), text_color=MUTED, wraplength=620, justify="left").pack(anchor="w")
         rr2 = ctk.CTkFrame(a, fg_color="transparent")
         rr2.pack(fill="x", pady=8)
-        ctk.CTkButton(rr2, text="🤖 LLM Test Et", command=self._test_llm).pack(side="left")
+        ctk.CTkButton(rr2, text=t("btn_test_llm"), command=self._test_llm).pack(side="left")
         self.llm_msg = ctk.CTkLabel(rr2, text="", font=font(12), text_color=MUTED)
         self.llm_msg.pack(side="left", padx=10)
 
         # --- Mail bulucu ---
-        h = self._card(box, "🔎 E-posta Bulucu (opsiyonel)")
-        self.set_hunter = self._field(h, "Hunter.io API anahtarı — boşsa kalıp tahmini (doğrulanmaz)",
+        h = self._card(box, t("card_finder"))
+        self.set_hunter = self._field(h, t("hunter_label"),
                                       "hunter_api_key", show="●")
 
-        u = self._card(box, "📊 Kullanım")
-        self.ai_count_lbl = ctk.CTkLabel(u, text=f"Toplam AI isteği: {self.s.get('ai_requests', 0)}",
+        u = self._card(box, t("card_usage"))
+        self.ai_count_lbl = ctk.CTkLabel(u, text=t("ai_count", count=self.s.get('ai_requests', 0)),
                                          font=font(13))
         self.ai_count_lbl.pack(anchor="w")
-        ctk.CTkLabel(u, text="Her 'Araştır & Taslak Üret' = hedef kişi sayısı kadar AI isteği.",
+        ctk.CTkLabel(u, text=t("ai_count_hint"),
                      font=font(11), text_color=MUTED).pack(anchor="w", pady=(2, 0))
 
-        ctk.CTkButton(p, text="💾  Tüm Ayarları Kaydet", height=46, corner_radius=12, fg_color=ACCENT,
+        ctk.CTkButton(p, text=t("btn_save_settings"), height=46, corner_radius=12, fg_color=ACCENT,
                       hover_color=ACCENT_H, font=font(15, True), command=self._save_settings).pack(fill="x", pady=(8, 0))
 
     def _on_service(self, name):
-        srv, port = SMTP_PRESETS[name]
-        if name == "Özel":
+        smtp_presets = get_smtp_presets()
+        srv, port = smtp_presets[name]
+        if name == t("smtp_custom"):
             self.adv.pack(fill="x")
         else:
             self.adv.pack_forget()
@@ -597,7 +634,7 @@ class App(ctk.CTk):
             self.set_port.delete(0, "end"); self.set_port.insert(0, str(port))
 
     def _on_provider(self, label):
-        prov = PROVIDER_LABELS[label]
+        prov = get_provider_labels()[label]
         self.set_model.configure(values=MODEL_PRESETS.get(prov, []))
         self.set_model.set(MODEL_PRESETS.get(prov, [""])[0])
         if prov == "openai":
@@ -610,7 +647,7 @@ class App(ctk.CTk):
             self.btn_fetch.pack_forget()
 
     def _fetch_models(self):
-        self.llm_msg.configure(text="modeller çekiliyor…", text_color=MUTED)
+        self.llm_msg.configure(text=t("fetching_models"), text_color=MUTED)
 
         def run():
             try:
@@ -621,11 +658,11 @@ class App(ctk.CTk):
                 cur = self.set_model.get()
                 self.after(0, lambda: (self.set_model.configure(values=ids),
                                        self.set_model.set(cur if cur in ids else ids[0]),
-                                       self.llm_msg.configure(text=f"{len(ids)} model yüklendi ✓",
+                                       self.llm_msg.configure(text=t("models_loaded", count=len(ids)),
                                                               text_color=OK)))
             else:
                 self.after(0, lambda: self.llm_msg.configure(
-                    text="çekilemedi (internet?)", text_color=DANGER))
+                    text=t("fetch_failed"), text_color=DANGER))
         threading.Thread(target=run, daemon=True).start()
 
     def _save_settings(self):
@@ -634,27 +671,32 @@ class App(ctk.CTk):
             self.s.set("smtp_port", int(self.set_port.get() or 587))
             self.s.set("email", self.set_email.get())
             self.s.set("smtp_password", self.set_pass.get())
-            self.s.set("llm_provider", PROVIDER_LABELS[self.set_provider.get()])
+            self.s.set("llm_provider", get_provider_labels()[self.set_provider.get()])
             self.s.set("llm_model", self.set_model.get())
             self.s.set("llm_base_url", self.set_baseurl.get())
             self.s.set("llm_api_key", self.set_apikey.get())
             self.s.set("use_grounding", bool(self.set_online.get()))
             self.s.set("hunter_api_key", self.set_hunter.get())
+            
+            selected_lang = UI_LANG_LABELS[self.set_ui_lang_opt.get()]
+            self.s.set("ui_lang", selected_lang)
+            set_ui_lang(selected_lang)
+            
             self.s.save()
             self._refresh_status()
-            messagebox.showinfo("Tamam", "Ayarlar kaydedildi.")
+            messagebox.showinfo(t("ok_title"), t("settings_saved"))
         except ValueError:
-            messagebox.showerror("Hata", "Port sayı olmalı.")
+            messagebox.showerror(t("error_title"), t("port_error"))
 
     def _test_smtp(self):
-        self.smtp_msg.configure(text="bağlanıyor…", text_color=MUTED)
+        self.smtp_msg.configure(text=t("connecting"), text_color=MUTED)
 
         def run():
             ok, msg = es.test_connection(self.set_server.get() or "smtp.gmail.com",
                                          int(self.set_port.get() or 587),
                                          self.set_email.get(), self.set_pass.get())
             self.after(0, lambda: self.smtp_msg.configure(
-                text=msg.split("\n")[0], text_color=OK if ok else DANGER))
+                text=msg.split("\n")[0] if ok else t("failed"), text_color=OK if ok else DANGER))
             if not ok:
                 self.after(0, lambda: messagebox.showerror("SMTP", msg))
         threading.Thread(target=run, daemon=True).start()
@@ -662,17 +704,17 @@ class App(ctk.CTk):
     def _test_llm(self):
         key = self.set_apikey.get()
         if not key:
-            self.llm_msg.configure(text="önce anahtar gir", text_color=WARN)
+            self.llm_msg.configure(text=t("enter_key_first"), text_color=WARN)
             return
-        client = LLMClient(PROVIDER_LABELS[self.set_provider.get()], key, self.set_model.get(),
+        client = LLMClient(get_provider_labels()[self.set_provider.get()], key, self.set_model.get(),
                            self.set_baseurl.get(), bool(self.set_online.get()))
-        self.llm_msg.configure(text="test ediliyor…", text_color=MUTED)
+        self.llm_msg.configure(text=t("testing"), text_color=MUTED)
 
         def run():
             ok, msg = client.test()
             self.after(0, self._bump_ai, 1)
             self.after(0, lambda: self.llm_msg.configure(
-                text="çalışıyor ✓" if ok else "başarısız", text_color=OK if ok else DANGER))
+                text=t("working") if ok else t("failed"), text_color=OK if ok else DANGER))
             if not ok:
                 self.after(0, lambda: messagebox.showerror("LLM", msg))
         threading.Thread(target=run, daemon=True).start()
@@ -681,7 +723,7 @@ class App(ctk.CTk):
     def _smtp_cfg(self):
         email = self.s.get("email"); pwd = self.s.get("smtp_password")
         if not (email and pwd):
-            messagebox.showwarning("Mail ayarı yok", "Önce Ayarlar'da mail hesabını gir.")
+            messagebox.showwarning(t("no_mail_title"), t("no_mail_msg"))
             self.show("settings")
             return None
         return {"server": self.s.get("smtp_server", "smtp.gmail.com"),
@@ -696,6 +738,6 @@ if __name__ == "__main__":
         log.critical("Çöktü: %s", e)
         try:
             from tkinter import messagebox
-            messagebox.showerror("Kritik Hata", str(e))
+            messagebox.showerror(t("critical_error"), str(e))
         except Exception:
             print("Kritik hata:", e)

@@ -25,6 +25,12 @@ TONES = {
     "akademik": "akademik, ölçülü ve nazik",
 }
 
+LENGTH_PROMPTS = {
+    "short":  "Gövde KISA olsun: 2-3 kısa paragraf, doğrudan ve öz. Net bir kapanış içersin.",
+    "medium": "Gövde ORTA uzunlukta olsun: 4-5 paragraf, dengeli detay seviyesi. Net bir kapanış/çağrı içersin.",
+    "long":   "Gövde UZUN ve DETAYLI olsun: 6-8 paragraf, somut örnekler, derinlemesine anlatım, güçlü argümanlar. Net bir kapanış/çağrı içersin.",
+}
+
 # Sağlayıcı varsayılanları
 PROVIDERS = {
     "gemini":     {"base": "", "label": "Google Gemini (web araması dahil)"},
@@ -82,9 +88,10 @@ def fetch_openrouter_models(api_key: str = ""):
     return sorted({m["id"] for m in data if m.get("id")})
 
 
-def _system_prompt(brief, profile, tone, lang, signature):
+def _system_prompt(brief, profile, tone, lang, signature, length="medium"):
     tone_desc = TONES.get(tone, TONES["samimi"])
     lang_name = "Türkçe" if lang == "tr" else "İngilizce"
+    length_desc = LENGTH_PROMPTS.get(length, LENGTH_PROMPTS["medium"])
     prof = (f"\n\nGÖNDERENİN PROFİLİ (mailleri bu kişinin ağzından, onun deneyim/becerilerine "
             f"atıfla yaz; metinde PDF'den gelen biçim bozuklukları olabilir, anlamlı yorumla):\n"
             f"{profile.strip()}") if profile else ""
@@ -99,7 +106,7 @@ atıf yap. Klişe, jenerik, şablon kokan cümlelerden kaçın.
 - Hedef bir URL ise (ör. LinkedIn profili veya web sitesi), o sayfayı/kişiyi araştır; \
 kişinin adını, rolünü, şirketini ve ilgili detayları çıkar ve maile yansıt.
 - GERÇEK bilgi kullan; bilmediğini uydurma, dürüst ve genel geç.
-- Konu kısa ve dikkat çekici olsun. Gövde 2-4 kısa paragraf, net bir kapanış/çağrı içersin.
+- Konu kısa ve dikkat çekici olsun. {length_desc}
 - E-posta adresi için: yalnızca açıkça yayınlanmış gerçek bir adres bulursan ver ve \
 "verified" işaretle. Bulamazsan email'i boş bırak ("unknown"); ADRES UYDURMA.
 - Çıktıyı SADECE şu JSON ile ver, başka hiçbir şey yazma:
@@ -143,8 +150,9 @@ class LLMClient:
         except Exception as e:
             return False, str(e)
 
-    def research_and_draft(self, target, brief, profile, tone, lang, signature) -> Dict:
-        sys = _system_prompt(brief, profile, tone, lang, signature)
+    def research_and_draft(self, target, brief, profile, tone, lang, signature,
+                            length="medium") -> Dict:
+        sys = _system_prompt(brief, profile, tone, lang, signature, length)
         user = (f"HEDEF: {target}\n\nBu hedefi araştır (kurum ne yapıyor, kişinin rolü, "
                 f"güncel bilgiler, web sitesi, iletişim). Sonra JSON taslağı üret.")
         text, sources = self._chat(f"{sys}\n\n{user}", web=self.online)
